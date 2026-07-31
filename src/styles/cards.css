@@ -1,0 +1,19 @@
+.card{
+    background:#161b22;
+    border-radius:16px;
+    padding:20px;
+    margin-bottom:20px;
+    border:1px solid #30363d;
+}
+
+.card-title{
+    font-size:22px;
+    margin-bottom:15px;
+}
+
+.player-row{
+    display:flex;
+    justify-content:space-between;
+    padding:12px;
+    border-bottom:1px solid #30363d;
+}

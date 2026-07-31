@@ -1,0 +1,88 @@
+const standings = [
+  {
+    rank: 1,
+    player: "Ant",
+    points: 1845,
+    spins: 18,
+    pointsPerSpin: 102.5,
+  },
+  {
+    rank: 2,
+    player: "Miano",
+    points: 1792,
+    spins: 20,
+    pointsPerSpin: 89.6,
+  },
+  {
+    rank: 3,
+    player: "Tony",
+    points: 1701,
+    spins: 17,
+    pointsPerSpin: 100.1,
+  },
+  {
+    rank: 4,
+    player: "Ryan",
+    points: 1675,
+    spins: 18,
+    pointsPerSpin: 93.1,
+  },
+  {
+    rank: 5,
+    player: "Danny",
+    points: 1652,
+    spins: 19,
+    pointsPerSpin: 86.9,
+  },
+  {
+    rank: 6,
+    player: "Mark",
+    points: 1608,
+    spins: 18,
+    pointsPerSpin: 89.3,
+  },
+  {
+    rank: 7,
+    player: "Leary",
+    points: 1560,
+    spins: 17,
+    pointsPerSpin: 91.8,
+  },
+  {
+    rank: 8,
+    player: "Hanson",
+    points: 1502,
+    spins: 18,
+    pointsPerSpin: 83.4,
+  },
+  {
+    rank: 9,
+    player: "Fandy",
+    points: 1477,
+    spins: 17,
+    pointsPerSpin: 86.9,
+  },
+  {
+    rank: 10,
+    player: "Cousineau",
+    points: 1440,
+    spins: 16,
+    pointsPerSpin: 90.0,
+  },
+  {
+    rank: 11,
+    player: "Bustin",
+    points: 1384,
+    spins: 17,
+    pointsPerSpin: 81.4,
+  },
+  {
+    rank: 12,
+    player: "Morris",
+    points: 1348,
+    spins: 16,
+    pointsPerSpin: 84.3,
+  },
+];
+
+export default standings;

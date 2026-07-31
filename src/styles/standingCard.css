@@ -1,0 +1,42 @@
+.standing-card {
+  background: #21262d;
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+.standing-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.standing-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.medal {
+  font-size: 22px;
+}
+
+.standing-points {
+  color: gold;
+  font-weight: bold;
+  font-size: 18px;
+}
+
+.standing-stats {
+  display: flex;
+  justify-content: space-between;
+
+  margin-top: 10px;
+
+  color: #9ca3af;
+
+  font-size: 14px;
+}
