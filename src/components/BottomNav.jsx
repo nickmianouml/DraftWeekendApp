@@ -4,29 +4,15 @@ import "../styles/bottomNav.css";
 function BottomNav() {
   return (
     <nav className="bottom-nav">
-      <NavLink to="/" className={({ isActive }) => isActive ? "active" : ""}>
-        🏠
-        <br />
-        Home
-      </NavLink>
+      <NavLink to="/">🏠<br />Home</NavLink>
 
-      <NavLink to="/players" className={({ isActive }) => isActive ? "active" : ""}>
-        👤
-        <br />
-        Players
-      </NavLink>
+      <NavLink to="/standings">🏆<br />Standings</NavLink>
 
-      <NavLink to="/standings" className={({ isActive }) => isActive ? "active" : ""}>
-        🏆
-        <br />
-        Standings
-      </NavLink>
+      <NavLink to="/games">🎯<br />Games</NavLink>
 
-      <NavLink to="/stats" className={({ isActive }) => isActive ? "active" : ""}>
-        📊
-        <br />
-        Stats
-      </NavLink>
+      <NavLink to="/players">👥<br />Players</NavLink>
+
+      <NavLink to="/stats">📊<br />Stats</NavLink>
     </nav>
   );
 }

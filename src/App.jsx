@@ -1,27 +1,42 @@
-import PlayerProfile from "./pages/PlayerProfile";
 import { Routes, Route } from "react-router-dom";
 
-import MainLayout from "./layouts/MainLayout";
+import Header from "./components/Header";
+import BottomNav from "./components/BottomNav";
 
 import Home from "./pages/Home";
-import Players from "./pages/Players";
 import Standings from "./pages/Standings";
+import Players from "./pages/Players";
+import PlayerProfile from "./pages/PlayerProfile";
+import Games from "./pages/Games";
+import GameDetails from "./pages/GameDetails";
 import Stats from "./pages/Stats";
-
-import "./styles/App.css";
 
 function App() {
   return (
-    <MainLayout>
+    <div
+      style={{
+        backgroundColor: "#0d1117",
+        color: "white",
+        minHeight: "100vh",
+        padding: "20px",
+        paddingBottom: "90px",
+        fontFamily: "Arial, sans-serif",
+      }}
+    >
+      <Header />
+
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/players" element={<Players />} />
         <Route path="/standings" element={<Standings />} />
+        <Route path="/players" element={<Players />} />
+        <Route path="/players/:playerName" element={<PlayerProfile />} />
+        <Route path="/games" element={<Games />} />
+        <Route path="/games/:gameId" element={<GameDetails />} />
         <Route path="/stats" element={<Stats />} />
-        <Route path="/players/:playerName" element={<PlayerProfile />}
-/>
       </Routes>
-    </MainLayout>
+
+      <BottomNav />
+    </div>
   );
 }
 
