@@ -29,11 +29,18 @@ function parseCsvLine(line) {
   return values;
 }
 
-export async function getLiveData() {
-  const response = await fetch(LIVE_URL);
+export async function getGameStatuses() {
+  const separator = LIVE_URL.includes("?") ? "&" : "?";
+
+  const response = await fetch(
+    `${LIVE_URL}${separator}cache=${Date.now()}`,
+    {
+      cache: "no-store",
+    }
+  );
 
   if (!response.ok) {
-    throw new Error("Unable to load live dashboard data.");
+    throw new Error("Unable to load game statuses.");
   }
 
   const csv = await response.text();
@@ -45,18 +52,23 @@ export async function getLiveData() {
 
   rows.shift();
 
-  const liveData = {};
+  const statuses = [];
 
   rows.forEach((row) => {
-    const metric = row[0]?.trim();
-    const value = row[1]?.trim();
+    const game = row[3]?.trim();
+    const status = row[4]?.trim();
 
-    if (!metric) {
+    if (!game) {
       return;
     }
 
-    liveData[metric] = value || "";
+    statuses.push({
+      game,
+      status: status || "Not Started",
+    });
   });
 
-  return liveData;
+  console.log("Live game statuses:", statuses);
+
+  return statuses;
 }
