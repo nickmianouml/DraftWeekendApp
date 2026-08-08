@@ -1,17 +1,22 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+
 import games from "../data/games";
 import { getGameData } from "../services/games";
+import { getMatchupsForGame } from "../services/currentGame";
 
 function GameDetails() {
   const { gameId } = useParams();
   const navigate = useNavigate();
 
   const [gameData, setGameData] = useState([]);
+  const [matchups, setMatchups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [lastUpdated, setLastUpdated] = useState(null);
 
   const game = games.find((item) => item.id === gameId);
+
   const gameName = game ? game.name : "";
   const gameIcon = game ? game.icon : "";
 
@@ -24,14 +29,18 @@ function GameDetails() {
       }
 
       try {
-        setLoading(true);
         setError("");
 
-        const data = await getGameData(gameName);
+        const [statsData, matchupData] = await Promise.all([
+          getGameData(gameName),
+          getMatchupsForGame(gameName),
+        ]);
 
-        setGameData(data);
+        setGameData(statsData);
+        setMatchups(matchupData);
+        setLastUpdated(new Date());
       } catch (err) {
-        console.error("Game data error:", err);
+        console.error("Game details error:", err);
         setError("Unable to load game data.");
       } finally {
         setLoading(false);
@@ -39,27 +48,20 @@ function GameDetails() {
     }
 
     loadGame();
+
+    const interval = setInterval(loadGame, 10000);
+
+    return () => clearInterval(interval);
   }, [gameName]);
 
   if (!game) {
     return (
       <div>
-        <button
-          onClick={() => navigate("/games")}
-          style={{
-            marginBottom: "20px",
-            padding: "10px 14px",
-            borderRadius: "8px",
-            border: "none",
-            cursor: "pointer",
-          }}
-        >
+        <button onClick={() => navigate("/games")}>
           ← Back
         </button>
 
         <h1>Game Not Found</h1>
-
-        <p>The selected game could not be found.</p>
       </div>
     );
   }
@@ -67,19 +69,6 @@ function GameDetails() {
   if (loading) {
     return (
       <div>
-        <button
-          onClick={() => navigate("/games")}
-          style={{
-            marginBottom: "20px",
-            padding: "10px 14px",
-            borderRadius: "8px",
-            border: "none",
-            cursor: "pointer",
-          }}
-        >
-          ← Back
-        </button>
-
         <h1>
           {gameIcon} {gameName}
         </h1>
@@ -92,16 +81,7 @@ function GameDetails() {
   if (error) {
     return (
       <div>
-        <button
-          onClick={() => navigate("/games")}
-          style={{
-            marginBottom: "20px",
-            padding: "10px 14px",
-            borderRadius: "8px",
-            border: "none",
-            cursor: "pointer",
-          }}
-        >
+        <button onClick={() => navigate("/games")}>
           ← Back
         </button>
 
@@ -131,77 +111,223 @@ function GameDetails() {
 
       <h1
         style={{
-          marginBottom: "20px",
+          marginBottom: "6px",
         }}
       >
         {gameIcon} {gameName}
       </h1>
 
-      {gameData.length === 0 ? (
-        <p>No live data available for this game yet.</p>
-      ) : (
-        gameData.map((player, index) => (
-          <div
-            key={player.player}
+      {lastUpdated && (
+        <p
+          style={{
+            color: "#8b949e",
+            fontSize: "13px",
+            marginTop: 0,
+            marginBottom: "20px",
+          }}
+        >
+          Updated{" "}
+          {lastUpdated.toLocaleTimeString([], {
+            hour: "numeric",
+            minute: "2-digit",
+            second: "2-digit",
+          })}
+        </p>
+      )}
+
+      {matchups.length > 0 && (
+        <div
+          style={{
+            backgroundColor: "#161b22",
+            border: "1px solid #3fb950",
+            borderRadius: "16px",
+            padding: "18px",
+            marginBottom: "24px",
+          }}
+        >
+          <h2
             style={{
-              backgroundColor: "#21262d",
-              border: "1px solid #30363d",
-              borderRadius: "12px",
-              padding: "16px",
-              marginBottom: "12px",
+              marginTop: 0,
+              marginBottom: "16px",
+              textAlign: "center",
             }}
           >
+            🟢 Live Matchups
+          </h2>
+
+          {matchups.map((matchup, index) => (
             <div
+              key={`${matchup.team1}-${matchup.team2}-${index}`}
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: "10px",
+                backgroundColor: "#21262d",
+                borderRadius: "14px",
+                padding: "16px",
+                marginBottom:
+                  index === matchups.length - 1 ? "0" : "12px",
               }}
             >
-              <h2
+              <div
                 style={{
-                  margin: 0,
+                  display: "grid",
+                  gridTemplateColumns: "1fr 70px 1fr",
+                  alignItems: "center",
+                  gap: "8px",
                 }}
               >
-                #{index + 1} {player.player}
-              </h2>
+                <div
+                  style={{
+                    textAlign: "center",
+                  }}
+                >
+                  <strong
+                    style={{
+                      display: "block",
+                      fontSize: "16px",
+                    }}
+                  >
+                    {matchup.team1}
+                  </strong>
 
-              <strong
-                style={{
-                  color: "gold",
-                  fontSize: "18px",
-                }}
-              >
-                {player.points.toLocaleString()} pts
-              </strong>
+                  <div
+                    style={{
+                      fontSize: "28px",
+                      marginTop: "4px",
+                    }}
+                  >
+                    {matchup.score1 || "-"}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    textAlign: "center",
+                  }}
+                >
+                  <strong
+                    style={{
+                      color: "#8b949e",
+                    }}
+                  >
+                    VS
+                  </strong>
+
+                  <div
+                    style={{
+                      marginTop: "18px",
+                      color: "#3fb950",
+                      fontSize: "13px",
+                      fontWeight: "bold",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    ● {matchup.status || "Live"}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    textAlign: "center",
+                  }}
+                >
+                  <strong
+                    style={{
+                      display: "block",
+                      fontSize: "16px",
+                    }}
+                  >
+                    {matchup.team2}
+                  </strong>
+
+                  <div
+                    style={{
+                      fontSize: "28px",
+                      marginTop: "4px",
+                    }}
+                  >
+                    {matchup.score2 || "-"}
+                  </div>
+                </div>
+              </div>
             </div>
+          ))}
+        </div>
+      )}
 
-            <p
+      <h2>🏆 Game Leaderboard</h2>
+
+      {gameData.length === 0 ? (
+        <p>No player data available yet.</p>
+      ) : (
+        gameData.map((player, index) => {
+          let rank = `#${index + 1}`;
+
+          if (index === 0) {
+            rank = "🥇";
+          }
+
+          if (index === 1) {
+            rank = "🥈";
+          }
+
+          if (index === 2) {
+            rank = "🥉";
+          }
+
+          return (
+            <div
+              key={player.player}
               style={{
-                margin: "4px 0",
+                backgroundColor: "#21262d",
+                border: "1px solid #30363d",
+                borderRadius: "12px",
+                padding: "16px",
+                marginBottom: "12px",
               }}
             >
-              🎲 Spins: {player.spins}
-            </p>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "8px",
+                }}
+              >
+                <strong
+                  style={{
+                    fontSize: "18px",
+                  }}
+                >
+                  {rank} {player.player}
+                </strong>
 
-            <p
-              style={{
-                margin: "4px 0",
-              }}
-            >
-              🎯 Spin Value: {player.spinValue}
-            </p>
+                <strong
+                  style={{
+                    color: "#f2cc60",
+                  }}
+                >
+                  {player.points.toLocaleString()} pts
+                </strong>
+              </div>
 
-            <p
-              style={{
-                margin: "4px 0",
-              }}
-            >
-              ⭐ Points: {player.points.toLocaleString()}
-            </p>
-          </div>
-        ))
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  color: "#8b949e",
+                  fontSize: "14px",
+                }}
+              >
+                <span>
+                  🎲 {player.spins} Spins
+                </span>
+
+                <span>
+                  SV: {player.spinValue}
+                </span>
+              </div>
+            </div>
+          );
+        })
       )}
     </div>
   );
