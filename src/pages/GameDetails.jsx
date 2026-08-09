@@ -54,6 +54,31 @@ function GameDetails() {
     return () => clearInterval(interval);
   }, [gameName]);
 
+  function getStatusDisplay(status) {
+    const normalized = String(status || "")
+      .trim()
+      .toLowerCase();
+
+    if (normalized === "in progress") {
+      return {
+        text: "● LIVE",
+        color: "#3fb950",
+      };
+    }
+
+    if (normalized === "complete") {
+      return {
+        text: "✓ Complete",
+        color: "#8b949e",
+      };
+    }
+
+    return {
+      text: "Not Started",
+      color: "#8b949e",
+    };
+  }
+
   if (!game) {
     return (
       <div>
@@ -94,6 +119,11 @@ function GameDetails() {
     );
   }
 
+  const gameStatus =
+    matchups.length > 0
+      ? getStatusDisplay(matchups[0].status)
+      : getStatusDisplay("");
+
   return (
     <div>
       <button
@@ -117,6 +147,17 @@ function GameDetails() {
         {gameIcon} {gameName}
       </h1>
 
+      <p
+        style={{
+          color: gameStatus.color,
+          fontWeight: "bold",
+          marginTop: "0",
+          marginBottom: "6px",
+        }}
+      >
+        {gameStatus.text}
+      </p>
+
       {lastUpdated && (
         <p
           style={{
@@ -139,7 +180,10 @@ function GameDetails() {
         <div
           style={{
             backgroundColor: "#161b22",
-            border: "1px solid #3fb950",
+            border:
+              gameStatus.text === "● LIVE"
+                ? "1px solid #3fb950"
+                : "1px solid #30363d",
             borderRadius: "16px",
             padding: "18px",
             marginBottom: "24px",
@@ -152,104 +196,112 @@ function GameDetails() {
               textAlign: "center",
             }}
           >
-            🟢 Live Matchups
+            🤝 Matchups
           </h2>
 
-          {matchups.map((matchup, index) => (
-            <div
-              key={`${matchup.team1}-${matchup.team2}-${index}`}
-              style={{
-                backgroundColor: "#21262d",
-                borderRadius: "14px",
-                padding: "16px",
-                marginBottom:
-                  index === matchups.length - 1 ? "0" : "12px",
-              }}
-            >
+          {matchups.map((matchup, index) => {
+            const matchupStatus =
+              getStatusDisplay(matchup.status);
+
+            return (
               <div
+                key={`${matchup.team1}-${matchup.team2}-${index}`}
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 70px 1fr",
-                  alignItems: "center",
-                  gap: "8px",
+                  backgroundColor: "#21262d",
+                  borderRadius: "14px",
+                  padding: "16px",
+                  marginBottom:
+                    index === matchups.length - 1
+                      ? "0"
+                      : "12px",
                 }}
               >
                 <div
                   style={{
-                    textAlign: "center",
+                    display: "grid",
+                    gridTemplateColumns:
+                      "1fr 70px 1fr",
+                    alignItems: "center",
+                    gap: "8px",
                   }}
                 >
-                  <strong
-                    style={{
-                      display: "block",
-                      fontSize: "16px",
-                    }}
-                  >
-                    {matchup.team1}
-                  </strong>
-
                   <div
                     style={{
-                      fontSize: "28px",
-                      marginTop: "4px",
+                      textAlign: "center",
                     }}
                   >
-                    {matchup.score1 || "-"}
+                    <strong
+                      style={{
+                        display: "block",
+                        fontSize: "16px",
+                      }}
+                    >
+                      {matchup.team1}
+                    </strong>
+
+                    <div
+                      style={{
+                        fontSize: "28px",
+                        marginTop: "4px",
+                      }}
+                    >
+                      {matchup.score1 || "-"}
+                    </div>
                   </div>
-                </div>
-
-                <div
-                  style={{
-                    textAlign: "center",
-                  }}
-                >
-                  <strong
-                    style={{
-                      color: "#8b949e",
-                    }}
-                  >
-                    VS
-                  </strong>
 
                   <div
                     style={{
-                      marginTop: "18px",
-                      color: "#3fb950",
-                      fontSize: "13px",
-                      fontWeight: "bold",
-                      whiteSpace: "nowrap",
+                      textAlign: "center",
                     }}
                   >
-                    ● {matchup.status || "Live"}
+                    <strong
+                      style={{
+                        color: "#8b949e",
+                      }}
+                    >
+                      VS
+                    </strong>
+
+                    <div
+                      style={{
+                        marginTop: "18px",
+                        color: matchupStatus.color,
+                        fontSize: "12px",
+                        fontWeight: "bold",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {matchupStatus.text}
+                    </div>
                   </div>
-                </div>
-
-                <div
-                  style={{
-                    textAlign: "center",
-                  }}
-                >
-                  <strong
-                    style={{
-                      display: "block",
-                      fontSize: "16px",
-                    }}
-                  >
-                    {matchup.team2}
-                  </strong>
 
                   <div
                     style={{
-                      fontSize: "28px",
-                      marginTop: "4px",
+                      textAlign: "center",
                     }}
                   >
-                    {matchup.score2 || "-"}
+                    <strong
+                      style={{
+                        display: "block",
+                        fontSize: "16px",
+                      }}
+                    >
+                      {matchup.team2}
+                    </strong>
+
+                    <div
+                      style={{
+                        fontSize: "28px",
+                        marginTop: "4px",
+                      }}
+                    >
+                      {matchup.score2 || "-"}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

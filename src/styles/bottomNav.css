@@ -4,27 +4,40 @@
   left: 0;
   right: 0;
 
-  max-width: 480px;
-  margin: auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
 
-  display: flex;
-  justify-content: space-around;
-
-  background: #161b22;
-
-  padding: 12px 0;
-
+  background-color: #161b22;
   border-top: 1px solid #30363d;
+
+  z-index: 1000;
 }
 
 .bottom-nav a {
+  min-height: 64px;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+
+  gap: 4px;
+
   color: #8b949e;
   text-decoration: none;
-  text-align: center;
-  font-size: 14px;
+
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.bottom-nav a span:first-child {
+  font-size: 20px;
 }
 
 .bottom-nav a.active {
-  color: #58a6ff;
-  font-weight: bold;
+  color: #f2cc60;
+}
+
+.bottom-nav a:hover {
+  color: white;
 }
