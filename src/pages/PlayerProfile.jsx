@@ -68,8 +68,15 @@ function PlayerProfile() {
     return <p>Player not found.</p>;
   }
 
+  const playedGames =
+    playerGames.filter(
+      (game) =>
+        Number(game.spins || 0) > 0 ||
+        Number(game.points || 0) > 0
+    );
+
   const sortedByPoints =
-    [...playerGames].sort(
+    [...playedGames].sort(
       (a, b) =>
         b.points - a.points
     );
@@ -80,7 +87,7 @@ function PlayerProfile() {
       : null;
 
   const gamesWithPoints =
-    playerGames.filter(
+    playedGames.filter(
       (game) =>
         game.points > 0
     );
@@ -94,23 +101,23 @@ function PlayerProfile() {
       : null;
 
   const totalGamePoints =
-    playerGames.reduce(
+    playedGames.reduce(
       (total, game) =>
         total + game.points,
       0
     );
 
   const totalGameSpins =
-    playerGames.reduce(
+    playedGames.reduce(
       (total, game) =>
         total + game.spins,
       0
     );
 
   const averagePointsPerGame =
-    playerGames.length > 0
+    playedGames.length > 0
       ? totalGamePoints /
-        playerGames.length
+        playedGames.length
       : 0;
 
   return (
@@ -143,12 +150,37 @@ function PlayerProfile() {
         style={{
           color: "#3fb950",
           marginTop: 0,
-          marginBottom: "22px",
+          marginBottom: "14px",
           fontWeight: "bold",
         }}
       >
         ● LIVE
       </p>
+
+      <button
+        onClick={() =>
+          navigate(
+            `/players/${encodeURIComponent(
+              player.player
+            )}/schedule`
+          )
+        }
+        style={{
+          width: "100%",
+          backgroundColor: "#21262d",
+          color: "#ffffff",
+          border: "1px solid #30363d",
+          borderRadius: "12px",
+          padding: "14px",
+          marginBottom: "20px",
+          cursor: "pointer",
+          fontSize: "15px",
+          fontWeight: "bold",
+          textAlign: "center",
+        }}
+      >
+        📅 View My Schedule
+      </button>
 
       <div
         style={{
@@ -291,11 +323,14 @@ function PlayerProfile() {
           return (
             <div
               key={game.id}
+              onClick={() =>
+                navigate(`/games/${game.id}`)
+              }
               style={{
-                padding:
-                  "14px 0",
+                padding: "14px 0",
                 borderBottom:
                   "1px solid #30363d",
+                cursor: "pointer",
               }}
             >
               <div
@@ -306,6 +341,7 @@ function PlayerProfile() {
                     "space-between",
                   alignItems:
                     "center",
+                  gap: "12px",
                 }}
               >
                 <strong
@@ -318,16 +354,34 @@ function PlayerProfile() {
                   {game.name}
                 </strong>
 
-                <strong
+                <div
                   style={{
-                    color:
-                      "#f2cc60",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
                   }}
                 >
-                  {stats
-                    ? `${stats.points.toLocaleString()} pts`
-                    : "0 pts"}
-                </strong>
+                  <strong
+                    style={{
+                      color:
+                        "#f2cc60",
+                    }}
+                  >
+                    {stats
+                      ? `${stats.points.toLocaleString()} pts`
+                      : "0 pts"}
+                  </strong>
+
+                  <span
+                    style={{
+                      color: "#8b949e",
+                      fontSize: "22px",
+                      lineHeight: 1,
+                    }}
+                  >
+                    ›
+                  </span>
+                </div>
               </div>
 
               <div

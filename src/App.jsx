@@ -5,6 +5,7 @@ import BottomNav from "./components/BottomNav";
 
 import Standings from "./pages/Standings";
 import PlayerProfile from "./pages/PlayerProfile";
+import PlayerSchedule from "./pages/PlayerSchedule";
 import Games from "./pages/Games";
 import GameDetails from "./pages/GameDetails";
 import Stats from "./pages/Stats";
@@ -34,6 +35,11 @@ function App() {
         <Route
           path="/players/:playerName"
           element={<PlayerProfile />}
+        />
+
+        <Route
+          path="/players/:playerName/schedule"
+          element={<PlayerSchedule />}
         />
 
         <Route path="/games" element={<Games />} />

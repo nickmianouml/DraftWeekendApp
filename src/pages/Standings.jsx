@@ -18,26 +18,33 @@ function Standings() {
       try {
         setError("");
 
-        const [playersData, liveData] = await Promise.all([
-          getPlayers(),
-          getLiveData(),
-        ]);
+        const [playersData, liveData] =
+          await Promise.all([
+            getPlayers(),
+            getLiveData(),
+          ]);
 
-        const sortedStandings = [...playersData].sort((a, b) => {
-          if (a.standings !== b.standings) {
-            return a.standings - b.standings;
-          }
+        const sortedStandings =
+          [...playersData].sort((a, b) => {
+            if (a.standings !== b.standings) {
+              return a.standings - b.standings;
+            }
 
-          return b.points - a.points;
-        });
+            return b.points - a.points;
+          });
 
         setStandings(sortedStandings);
         setLive(liveData);
         setLastUpdated(new Date());
       } catch (err) {
-        console.error("Standings page error:", err);
+        console.error(
+          "Standings page error:",
+          err
+        );
 
-        setError("Unable to load the live standings.");
+        setError(
+          "Unable to load the live standings."
+        );
       } finally {
         setLoading(false);
       }
@@ -45,7 +52,10 @@ function Standings() {
 
     loadStandings();
 
-    const interval = setInterval(loadStandings, 10000);
+    const interval = setInterval(
+      loadStandings,
+      10000
+    );
 
     return () => clearInterval(interval);
   }, []);
@@ -83,6 +93,15 @@ function Standings() {
       </div>
     );
   }
+
+  const firstPlacePoints =
+    standings.length > 0
+      ? Math.max(
+          ...standings.map((player) =>
+            Number(player.points || 0)
+          )
+        )
+      : 0;
 
   return (
     <div className="standings-page">
@@ -130,121 +149,213 @@ function Standings() {
         <SummaryTile
           icon="🔥"
           label="Luckiest"
-          value={formatPPS(live?.["Highest PPS"])}
+          value={formatPPS(
+            live?.["Highest PPS"]
+          )}
           showPPS
-          detail={live?.["Hottest Player"] || ""}
+          detail={
+            live?.["Hottest Player"] || ""
+          }
         />
 
         <SummaryTile
           icon="🎡"
           label="Total Spins"
-          value={live?.["Total Spins"] || "0"}
+          value={
+            live?.["Total Spins"] || "0"
+          }
           detail="Awarded"
         />
 
         <SummaryTile
           icon="☘️"
           label="Unluckiest"
-          value={formatPPS(live?.["Lowest PPS"])}
+          value={formatPPS(
+            live?.["Lowest PPS"]
+          )}
           showPPS
-          detail={live?.["Unluckiest Player"] || ""}
+          detail={
+            live?.["Unluckiest Player"] ||
+            ""
+          }
         />
 
         <SummaryTile
           icon="🍺"
           label="Total Porch Beers"
-          value={live?.["Total Porch Beers"] || "0"}
+          value={
+            live?.["Total Porch Beers"] ||
+            "0"
+          }
           detail="Spun"
         />
       </div>
 
       <div className="standings-list">
-        {standings.map((player, index) => {
-          const rank = player.standings || index + 1;
+        {standings.map(
+          (player, index) => {
+            const rank =
+              player.standings ||
+              index + 1;
 
-          return (
-            <Link
-              key={player.player}
-              to={`/players/${encodeURIComponent(player.player)}`}
-              className="standing-player-link"
-            >
-              <div
-                className={`standing-row ${
-                  rank === 1 ? "standing-first" : ""
-                }`}
+            const pointsBehind =
+              Math.max(
+                0,
+                firstPlacePoints -
+                  Number(player.points || 0)
+              );
+
+            return (
+              <Link
+                key={player.player}
+                to={`/players/${encodeURIComponent(
+                  player.player
+                )}`}
+                className="standing-player-link"
               >
-                <div className="standing-main">
-                  <div className="standing-rank">
-                    {getRankDisplay(rank)}
-                  </div>
-
-                  <div className="standing-player">
-                    <strong>
-                      {player.player}
-                    </strong>
-
-                    <span>
-                      {Number(player.points || 0).toLocaleString()} points
-                    </span>
-                  </div>
-
-                  <div className="standing-arrow">
-                    ›
-                  </div>
-                </div>
-
                 <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(3, 1fr)",
-                    borderTop: "1px solid #30363d",
-                  }}
+                  className={`standing-row ${
+                    rank === 1
+                      ? "standing-first"
+                      : ""
+                  }`}
                 >
-                  <PlayerStat
-                    label="Points"
-                    value={Number(player.points || 0).toLocaleString()}
-                    borderRight
-                    borderBottom
-                  />
+                  <div className="standing-main">
+                    <div className="standing-rank">
+                      {getRankDisplay(rank)}
+                    </div>
 
-                  <PlayerStat
-                    label="Spins"
-                    value={player.spins || 0}
-                    borderRight
-                    borderBottom
-                  />
+                    <div
+                      className="standing-player"
+                      style={{
+                        display: "flex",
+                        flexDirection:
+                          "column",
+                        alignItems:
+                          "center",
+                        justifyContent:
+                          "center",
+                      }}
+                    >
+                      <strong
+                        style={{
+                          color: "#ffffff",
+                          fontSize: "20px",
+                        }}
+                      >
+                        {player.player}
+                      </strong>
 
-                  <PlayerStat
-                    label="Spin Rank"
-                    value={
-                      player.spinRank
-                        ? `#${player.spinRank}`
-                        : "-"
-                    }
-                    borderBottom
-                  />
+                      <div
+                        style={{
+                          marginTop: "5px",
+                          display: "flex",
+                          alignItems:
+                            "baseline",
+                          justifyContent:
+                            "center",
+                          gap: "5px",
+                        }}
+                      >
+                        <strong
+                          style={{
+                            color:
+                              "#f2cc60",
+                            fontSize:
+                              "22px",
+                            lineHeight: 1,
+                          }}
+                        >
+                          {Number(
+                            player.points || 0
+                          ).toLocaleString()}
+                        </strong>
 
-                  <PlayerStat
-                    label="SPG"
-                    value={formatStat(player.spinsPerGame)}
-                    borderRight
-                  />
+                        <span
+                          style={{
+                            color:
+                              "#f2cc60",
+                            fontSize:
+                              "11px",
+                            fontWeight:
+                              "bold",
+                            textTransform:
+                              "uppercase",
+                          }}
+                        >
+                          Points
+                        </span>
+                      </div>
+                    </div>
 
-                  <PlayerStat
-                    label="PPS"
-                    value={formatStat(player.pointsPerSpin)}
-                    borderRight
-                  />
+                    <div className="standing-arrow">
+                      ›
+                    </div>
+                  </div>
 
-                  <PlayerStat
-                    label="100s"
-                    value={player.hundreds || 0}
-                  />
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns:
+                        "repeat(3, 1fr)",
+                      borderTop:
+                        "1px solid #30363d",
+                    }}
+                  >
+                    <PlayerStat
+                      label="Spins"
+                      value={
+                        player.spins || 0
+                      }
+                      borderRight
+                      borderBottom
+                    />
+
+                    <PlayerStat
+                      label="Spin Rank"
+                      value={
+                        player.spinRank
+                          ? `#${player.spinRank}`
+                          : "-"
+                      }
+                      borderRight
+                      borderBottom
+                    />
+
+                    <PlayerStat
+                      label="Spins Per Game"
+                      value={formatStat(
+                        player.spinsPerGame
+                      )}
+                      borderBottom
+                    />
+
+                    <PlayerStat
+                      label="Points Per Spin"
+                      value={formatStat(
+                        player.pointsPerSpin
+                      )}
+                      borderRight
+                    />
+
+                    <PlayerStat
+                      label="Points Behind 1st"
+                      value={pointsBehind}
+                      borderRight
+                    />
+
+                    <PlayerStat
+                      label="100s"
+                      value={
+                        player.hundreds || 0
+                      }
+                    />
+                  </div>
                 </div>
-              </div>
-            </Link>
-          );
-        })}
+              </Link>
+            );
+          }
+        )}
       </div>
     </div>
   );
@@ -280,7 +391,8 @@ function SummaryTile({
               position: "absolute",
               left: "calc(50% + 48px)",
               top: "50%",
-              transform: "translateY(-50%)",
+              transform:
+                "translateY(-50%)",
               color: "#8b949e",
               fontSize: "11px",
               fontWeight: "bold",
