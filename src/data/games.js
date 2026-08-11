@@ -27,7 +27,7 @@ const games = [
   {
     id: "polish-horseshoes",
     name: "Polish Horseshoes",
-    icon: "🥏",
+    icon: "🥏🍾",
   },
   {
     id: "spikeball",
@@ -42,7 +42,7 @@ const games = [
   {
     id: "ladderball",
     name: "Ladderball",
-    icon: "🎯",
+    icon: "🔴〰️🔵",
   },
   {
     id: "cornhole",
@@ -72,7 +72,7 @@ const games = [
   {
     id: "fuck-yeah",
     name: "Fuck Yeah",
-    icon: "🔥",
+    icon: "🤘🔥",
   },
   {
     id: "mouse-trap",
@@ -82,7 +82,7 @@ const games = [
   {
     id: "liars-dice",
     name: "Liars Dice",
-    icon: "🎲",
+    icon: "🎲🎲",
   },
   {
     id: "elimination-chamber",

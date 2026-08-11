@@ -348,6 +348,7 @@ function GameDetails() {
       <h1
         style={{
           marginBottom: "6px",
+          color: "white",
         }}
       >
         {gameIcon} {gameName}
@@ -605,6 +606,7 @@ function CaptainTeams({
         style={{
           marginTop: 0,
           textAlign: "center",
+          color: "white",
         }}
       >
         👥 Teams
@@ -946,6 +948,7 @@ function RelayRaceResult({
         style={{
           textAlign: "center",
           marginTop: 0,
+          color: "white",
         }}
       >
         🏁 Result
@@ -1051,6 +1054,7 @@ function FlipCupRounds({
         style={{
           textAlign: "center",
           marginTop: 0,
+          color: "white",
         }}
       >
         🥤 Round Results
@@ -1164,6 +1168,7 @@ function BaseballBoxScore({
         style={{
           textAlign: "center",
           marginTop: 0,
+          color: "white",
         }}
       >
         ⚾ Box Score
@@ -1323,6 +1328,7 @@ function EliminationChamberSection({
         style={{
           textAlign: "center",
           marginBottom: "16px",
+          color: "white",
         }}
       >
         🏟️ Matchups
@@ -1379,6 +1385,7 @@ function EliminationChamberSection({
                   marginTop: 0,
                   marginBottom:
                     "14px",
+                  color: "white",
                 }}
               >
                 {getChamberGroupTitle(
@@ -1516,6 +1523,7 @@ function PlacementSection({
         style={{
           marginTop: 0,
           textAlign: "center",
+          color: "white",
         }}
       >
         🏁 Placements
@@ -1597,6 +1605,7 @@ function RPSSection({
         style={{
           marginTop: 0,
           textAlign: "center",
+          color: "white",
         }}
       >
         ✊ Matchups
@@ -1820,6 +1829,7 @@ function MatchupSection({
         style={{
           marginTop: 0,
           textAlign: "center",
+          color: "white",
         }}
       >
         🤝 Matchups
@@ -1955,9 +1965,19 @@ function MatchupSection({
 function GameLeaderboard({
   gameData,
 }) {
+  const rankedGameData = [...gameData].sort(
+    (a, b) =>
+      Number(b.points || 0) -
+      Number(a.points || 0)
+  );
+
   return (
     <>
-      <h2>
+      <h2
+        style={{
+          color: "white",
+        }}
+      >
         🏆 Game Leaderboard
       </h2>
 
@@ -1966,23 +1986,35 @@ function GameLeaderboard({
           No player data available yet.
         </p>
       ) : (
-        gameData.map(
+        rankedGameData.map(
           (
             player,
             index
           ) => {
-            let rank =
-              `#${index + 1}`;
+            const playerPoints =
+              Number(player.points || 0);
 
-            if (index === 0) {
+            const numericRank =
+              1 +
+              rankedGameData.filter(
+                (otherPlayer) =>
+                  Number(
+                    otherPlayer.points || 0
+                  ) > playerPoints
+              ).length;
+
+            let rank =
+              `#${numericRank}`;
+
+            if (numericRank === 1) {
               rank = "🥇";
             }
 
-            if (index === 1) {
+            if (numericRank === 2) {
               rank = "🥈";
             }
 
-            if (index === 2) {
+            if (numericRank === 3) {
               rank = "🥉";
             }
 
@@ -2054,7 +2086,7 @@ function GameLeaderboard({
                   }}
                 >
                   <span>
-                    🎲{" "}
+                    🎡{" "}
                     {
                       player.spins
                     }{" "}

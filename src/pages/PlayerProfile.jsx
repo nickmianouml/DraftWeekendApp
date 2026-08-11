@@ -342,7 +342,7 @@ function PlayerProfile() {
                 }}
               >
                 <span>
-                  🎲{" "}
+                  🎡{" "}
                   {stats
                     ? stats.spins
                     : 0}{" "}

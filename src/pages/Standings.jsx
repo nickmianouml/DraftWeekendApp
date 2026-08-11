@@ -18,34 +18,26 @@ function Standings() {
       try {
         setError("");
 
-        const [playersData, liveData] =
-          await Promise.all([
-            getPlayers(),
-            getLiveData(),
-          ]);
+        const [playersData, liveData] = await Promise.all([
+          getPlayers(),
+          getLiveData(),
+        ]);
 
-        const sortedStandings = [...playersData].sort(
-          (a, b) => {
-            if (a.standings !== b.standings) {
-              return a.standings - b.standings;
-            }
-
-            return b.points - a.points;
+        const sortedStandings = [...playersData].sort((a, b) => {
+          if (a.standings !== b.standings) {
+            return a.standings - b.standings;
           }
-        );
+
+          return b.points - a.points;
+        });
 
         setStandings(sortedStandings);
         setLive(liveData);
         setLastUpdated(new Date());
       } catch (err) {
-        console.error(
-          "Standings page error:",
-          err
-        );
+        console.error("Standings page error:", err);
 
-        setError(
-          "Unable to load the live standings."
-        );
+        setError("Unable to load the live standings.");
       } finally {
         setLoading(false);
       }
@@ -53,10 +45,7 @@ function Standings() {
 
     loadStandings();
 
-    const interval = setInterval(
-      loadStandings,
-      10000
-    );
+    const interval = setInterval(loadStandings, 10000);
 
     return () => clearInterval(interval);
   }, []);
@@ -128,14 +117,11 @@ function Standings() {
             }}
           >
             Updated{" "}
-            {lastUpdated.toLocaleTimeString(
-              [],
-              {
-                hour: "numeric",
-                minute: "2-digit",
-                second: "2-digit",
-              }
-            )}
+            {lastUpdated.toLocaleTimeString([], {
+              hour: "numeric",
+              minute: "2-digit",
+              second: "2-digit",
+            })}
           </p>
         )}
       </div>
@@ -143,41 +129,48 @@ function Standings() {
       <div className="standings-summary">
         <SummaryTile
           icon="🔥"
-          label="Highest PPS"
-          value={
-            live?.["Highest PPS"] || "0"
-          }
-          detail={
-            live?.["Hottest Player"] || ""
-          }
+          label="Luckiest"
+          value={formatPPS(live?.["Highest PPS"])}
+          showPPS
+          detail={live?.["Hottest Player"] || ""}
         />
 
         <SummaryTile
-          icon="🎲"
+          icon="🎡"
           label="Total Spins"
           value={live?.["Total Spins"] || "0"}
           detail="Awarded"
+        />
+
+        <SummaryTile
+          icon="☘️"
+          label="Unluckiest"
+          value={formatPPS(live?.["Lowest PPS"])}
+          showPPS
+          detail={live?.["Unluckiest Player"] || ""}
+        />
+
+        <SummaryTile
+          icon="🍺"
+          label="Total Porch Beers"
+          value={live?.["Total Porch Beers"] || "0"}
+          detail="Spun"
         />
       </div>
 
       <div className="standings-list">
         {standings.map((player, index) => {
-          const rank =
-            player.standings || index + 1;
+          const rank = player.standings || index + 1;
 
           return (
             <Link
               key={player.player}
-              to={`/players/${encodeURIComponent(
-                player.player
-              )}`}
+              to={`/players/${encodeURIComponent(player.player)}`}
               className="standing-player-link"
             >
               <div
                 className={`standing-row ${
-                  rank === 1
-                    ? "standing-first"
-                    : ""
+                  rank === 1 ? "standing-first" : ""
                 }`}
               >
                 <div className="standing-main">
@@ -191,10 +184,7 @@ function Standings() {
                     </strong>
 
                     <span>
-                      {Number(
-                        player.points || 0
-                      ).toLocaleString()}{" "}
-                      points
+                      {Number(player.points || 0).toLocaleString()} points
                     </span>
                   </div>
 
@@ -206,17 +196,13 @@ function Standings() {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns:
-                      "repeat(3, 1fr)",
-                    borderTop:
-                      "1px solid #30363d",
+                    gridTemplateColumns: "repeat(3, 1fr)",
+                    borderTop: "1px solid #30363d",
                   }}
                 >
                   <PlayerStat
                     label="Points"
-                    value={Number(
-                      player.points || 0
-                    ).toLocaleString()}
+                    value={Number(player.points || 0).toLocaleString()}
                     borderRight
                     borderBottom
                   />
@@ -240,25 +226,19 @@ function Standings() {
 
                   <PlayerStat
                     label="SPG"
-                    value={formatStat(
-                      player.spinsPerGame
-                    )}
+                    value={formatStat(player.spinsPerGame)}
                     borderRight
                   />
 
                   <PlayerStat
                     label="PPS"
-                    value={formatStat(
-                      player.pointsPerSpin
-                    )}
+                    value={formatStat(player.pointsPerSpin)}
                     borderRight
                   />
 
                   <PlayerStat
                     label="100s"
-                    value={
-                      player.hundreds || 0
-                    }
+                    value={player.hundreds || 0}
                   />
                 </div>
               </div>
@@ -274,6 +254,7 @@ function SummaryTile({
   icon,
   label,
   value,
+  showPPS = false,
   detail,
 }) {
   return (
@@ -282,9 +263,38 @@ function SummaryTile({
         {icon} {label}
       </span>
 
-      <strong className="summary-value">
-        {value}
-      </strong>
+      {showPPS ? (
+        <div
+          style={{
+            position: "relative",
+            width: "100%",
+            textAlign: "center",
+          }}
+        >
+          <strong className="summary-value">
+            {value}
+          </strong>
+
+          <span
+            style={{
+              position: "absolute",
+              left: "calc(50% + 48px)",
+              top: "50%",
+              transform: "translateY(-50%)",
+              color: "#8b949e",
+              fontSize: "11px",
+              fontWeight: "bold",
+              whiteSpace: "nowrap",
+            }}
+          >
+            PPS
+          </span>
+        </div>
+      ) : (
+        <strong className="summary-value">
+          {value}
+        </strong>
+      )}
 
       <span className="summary-detail">
         {detail}
@@ -357,6 +367,20 @@ function formatStat(value) {
 
   if (Number.isNaN(number)) {
     return "0.000";
+  }
+
+  return number.toFixed(3);
+}
+
+function formatPPS(value) {
+  const number = Number(value);
+
+  if (Number.isNaN(number)) {
+    return "0";
+  }
+
+  if (Number.isInteger(number)) {
+    return number.toString();
   }
 
   return number.toFixed(3);

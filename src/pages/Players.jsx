@@ -57,7 +57,7 @@ function Players() {
               </p>
 
               <p style={{ margin: "4px 0", color: "#c9d1d9" }}>
-                🎲 Spins: {player.spins}
+                🎡 Spins: {player.spins}
               </p>
 
               <p style={{ margin: "4px 0", color: "#c9d1d9" }}>

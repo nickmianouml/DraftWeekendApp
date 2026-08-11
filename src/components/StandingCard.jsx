@@ -22,7 +22,7 @@ function StandingCard({ standing }) {
       </div>
 
       <div className="standing-stats">
-        <span>🎲 {standing.spins} Spins</span>
+        <span>🎡 {standing.spins} Spins</span>
 
         <span>{standing.pointsPerSpin} pts/spin</span>
       </div>
