@@ -2,7 +2,7 @@ const games = [
   {
     id: "flip-cup",
     name: "Flip Cup",
-    icon: "🥤",
+    icon: "🥤️",
   },
   {
     id: "baseball",
