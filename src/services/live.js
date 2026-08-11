@@ -30,10 +30,19 @@ function parseCsvLine(line) {
 }
 
 export async function getLiveData() {
-  const response = await fetch(LIVE_URL);
+  const separator = LIVE_URL.includes("?") ? "&" : "?";
+
+  const response = await fetch(
+    `${LIVE_URL}${separator}cache=${Date.now()}`,
+    {
+      cache: "no-store",
+    }
+  );
 
   if (!response.ok) {
-    throw new Error("Unable to load live dashboard data.");
+    throw new Error(
+      "Unable to load live dashboard data."
+    );
   }
 
   const csv = await response.text();

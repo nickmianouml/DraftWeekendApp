@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { getStandings } from "../services/googleSheets";
+import { getPlayers } from "../services/players";
 import { getLiveData } from "../services/live";
 
 import "../styles/standingsPage.css";
@@ -18,16 +18,16 @@ function Standings() {
       try {
         setError("");
 
-        const [standingsData, liveData] =
+        const [playersData, liveData] =
           await Promise.all([
-            getStandings(),
+            getPlayers(),
             getLiveData(),
           ]);
 
-        const sortedStandings = [...standingsData].sort(
+        const sortedStandings = [...playersData].sort(
           (a, b) => {
-            if (a.rank !== b.rank) {
-              return a.rank - b.rank;
+            if (a.standings !== b.standings) {
+              return a.standings - b.standings;
             }
 
             return b.points - a.points;
@@ -64,7 +64,14 @@ function Standings() {
   if (loading) {
     return (
       <div className="standings-page">
-        <h1>🏆 2026 Standings</h1>
+        <h1
+          style={{
+            color: "#ffffff",
+            textAlign: "center",
+          }}
+        >
+          🏆 2026 Standings
+        </h1>
 
         <p>Loading standings...</p>
       </div>
@@ -74,7 +81,14 @@ function Standings() {
   if (error) {
     return (
       <div className="standings-page">
-        <h1>🏆 2026 Standings</h1>
+        <h1
+          style={{
+            color: "#ffffff",
+            textAlign: "center",
+          }}
+        >
+          🏆 2026 Standings
+        </h1>
 
         <p>{error}</p>
       </div>
@@ -83,9 +97,23 @@ function Standings() {
 
   return (
     <div className="standings-page">
-      <div className="standings-heading">
+      <div
+        className="standings-heading"
+        style={{
+          display: "block",
+          textAlign: "center",
+        }}
+      >
         <div>
-          <h1>🏆 2026 Standings</h1>
+          <h1
+            style={{
+              color: "#ffffff",
+              textAlign: "center",
+              marginBottom: "4px",
+            }}
+          >
+            🏆 2026 Standings
+          </h1>
 
           <p className="standings-live">
             ● LIVE
@@ -93,7 +121,12 @@ function Standings() {
         </div>
 
         {lastUpdated && (
-          <p className="standings-updated">
+          <p
+            className="standings-updated"
+            style={{
+              textAlign: "center",
+            }}
+          >
             Updated{" "}
             {lastUpdated.toLocaleTimeString(
               [],
@@ -130,7 +163,7 @@ function Standings() {
       <div className="standings-list">
         {standings.map((player, index) => {
           const rank =
-            player.rank || index + 1;
+            player.standings || index + 1;
 
           return (
             <Link
@@ -170,24 +203,62 @@ function Standings() {
                   </div>
                 </div>
 
-                <div className="standing-stats">
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns:
+                      "repeat(3, 1fr)",
+                    borderTop:
+                      "1px solid #30363d",
+                  }}
+                >
                   <PlayerStat
                     label="Points"
                     value={Number(
                       player.points || 0
                     ).toLocaleString()}
+                    borderRight
+                    borderBottom
                   />
 
                   <PlayerStat
                     label="Spins"
                     value={player.spins || 0}
+                    borderRight
+                    borderBottom
+                  />
+
+                  <PlayerStat
+                    label="Spin Rank"
+                    value={
+                      player.spinRank
+                        ? `#${player.spinRank}`
+                        : "-"
+                    }
+                    borderBottom
+                  />
+
+                  <PlayerStat
+                    label="SPG"
+                    value={formatStat(
+                      player.spinsPerGame
+                    )}
+                    borderRight
                   />
 
                   <PlayerStat
                     label="PPS"
-                    value={formatPPS(
+                    value={formatStat(
                       player.pointsPerSpin
                     )}
+                    borderRight
+                  />
+
+                  <PlayerStat
+                    label="100s"
+                    value={
+                      player.hundreds || 0
+                    }
                   />
                 </div>
               </div>
@@ -222,12 +293,45 @@ function SummaryTile({
   );
 }
 
-function PlayerStat({ label, value }) {
+function PlayerStat({
+  label,
+  value,
+  borderRight = false,
+  borderBottom = false,
+}) {
   return (
-    <div className="standing-stat">
-      <span>{label}</span>
+    <div
+      style={{
+        padding: "16px 8px",
+        textAlign: "center",
+        borderRight: borderRight
+          ? "1px solid #30363d"
+          : "none",
+        borderBottom: borderBottom
+          ? "1px solid #30363d"
+          : "none",
+      }}
+    >
+      <span
+        style={{
+          display: "block",
+          color: "#8b949e",
+          fontSize: "11px",
+          textTransform: "uppercase",
+          marginBottom: "8px",
+        }}
+      >
+        {label}
+      </span>
 
-      <strong>{value}</strong>
+      <strong
+        style={{
+          color: "#ffffff",
+          fontSize: "16px",
+        }}
+      >
+        {value}
+      </strong>
     </div>
   );
 }
@@ -248,7 +352,7 @@ function getRankDisplay(rank) {
   return `#${rank}`;
 }
 
-function formatPPS(value) {
+function formatStat(value) {
   const number = Number(value);
 
   if (Number.isNaN(number)) {

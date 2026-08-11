@@ -107,7 +107,13 @@ function Games() {
 
   return (
     <div className="games-page">
-      <h1 className="games-title">
+      <h1
+        className="games-title"
+        style={{
+          color: "#ffffff",
+          textAlign: "center",
+        }}
+      >
         🎯 Games
       </h1>
 
@@ -149,7 +155,12 @@ function Games() {
                   {game.icon}
                 </span>
 
-                <h2 className="game-name">
+                <h2
+                  className="game-name"
+                  style={{
+                    color: "#ffffff",
+                  }}
+                >
                   {game.name}
                 </h2>
               </div>

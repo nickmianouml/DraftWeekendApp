@@ -1,5 +1,5 @@
-const GAMES_URL =
-  "https://docs.google.com/spreadsheets/d/e/2PACX-1vRIeHL18j-kihduE5ChG91aJOdcFo78J7BjYJscs142FBzCT13WkrCT08B-h4KMY6ODVezjvn1H31iH/pub?gid=1811868746&single=true&output=csv";
+const PLAYER_GAMES_URL =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vRIeHL18j-kihduE5ChG91aJOdcFo78J7BjYJscs142FBzCT13WkrCT08B-h4KMY6ODVezjvn1H31iH/pub?gid=40128446&single=true&output=csv";
 
 function parseCsvLine(line) {
   const values = [];
@@ -30,7 +30,15 @@ function parseCsvLine(line) {
 }
 
 export async function getGamesData() {
-  const response = await fetch(GAMES_URL);
+  const separator =
+    PLAYER_GAMES_URL.includes("?") ? "&" : "?";
+
+  const response = await fetch(
+    `${PLAYER_GAMES_URL}${separator}cache=${Date.now()}`,
+    {
+      cache: "no-store",
+    }
+  );
 
   if (!response.ok) {
     throw new Error("Unable to load game data.");
@@ -46,10 +54,15 @@ export async function getGamesData() {
   rows.shift();
 
   return rows
-    .filter((row) => row.length >= 5 && row[0] && row[1])
+    .filter(
+      (row) =>
+        row.length >= 5 &&
+        row[0] &&
+        row[1]
+    )
     .map((row) => ({
-      game: row[0].trim(),
-      player: row[1].trim(),
+      player: row[0].trim(),
+      game: row[1].trim(),
       spins: Number(row[2]) || 0,
       spinValue: Number(row[3]) || 0,
       points: Number(row[4]) || 0,
@@ -62,7 +75,8 @@ export async function getGameData(gameName) {
   return games
     .filter(
       (row) =>
-        row.game.toLowerCase() === gameName.toLowerCase()
+        row.game.toLowerCase() ===
+        gameName.toLowerCase()
     )
     .sort((a, b) => b.points - a.points);
 }

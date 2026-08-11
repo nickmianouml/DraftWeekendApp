@@ -23,6 +23,7 @@ export async function getPlayers() {
         points,
         spinRank,
         spins,
+        spg,
         pps,
         hundreds,
         year,
@@ -34,6 +35,7 @@ export async function getPlayers() {
         points: Number(points),
         spinRank: Number(spinRank),
         spins: Number(spins),
+        spinsPerGame: Number(spg),
         pointsPerSpin: Number(pps),
         hundreds: Number(hundreds),
         year: Number(year),
@@ -44,10 +46,12 @@ export async function getPlayers() {
 export async function getPlayer(playerName) {
   const players = await getPlayers();
 
-  const decodedPlayerName = decodeURIComponent(playerName);
+  const decodedPlayerName =
+    decodeURIComponent(playerName);
 
   return players.find(
     (player) =>
-      player.player.toLowerCase() === decodedPlayerName.toLowerCase()
+      player.player.toLowerCase() ===
+      decodedPlayerName.toLowerCase()
   );
 }

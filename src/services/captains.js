@@ -66,6 +66,7 @@ export async function getCaptainGames() {
         row[7]?.trim() || "",
         row[9]?.trim() || "",
         row[11]?.trim() || "",
+        row[13]?.trim() || "",
       ],
 
       picks2: [
@@ -74,12 +75,13 @@ export async function getCaptainGames() {
         row[8]?.trim() || "",
         row[10]?.trim() || "",
         row[12]?.trim() || "",
+        row[14]?.trim() || "",
       ],
 
-      score1: row[13]?.trim() || "",
-      score2: row[14]?.trim() || "",
+      score1: row[15]?.trim() || "",
+      score2: row[16]?.trim() || "",
 
-      status: row[15]?.trim() || "Not Started",
+      status: row[17]?.trim() || "Not Started",
     }));
 }
 

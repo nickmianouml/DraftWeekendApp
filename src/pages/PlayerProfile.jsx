@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+
 import { getPlayer } from "../services/players";
 import { getPlayerGames } from "../services/playerGames";
 import games from "../data/games";
@@ -19,16 +20,23 @@ function PlayerProfile() {
         setError("");
         setLoading(true);
 
-        const [playerData, gamesData] = await Promise.all([
-          getPlayer(playerName),
-          getPlayerGames(playerName),
-        ]);
+        const [playerData, gamesData] =
+          await Promise.all([
+            getPlayer(playerName),
+            getPlayerGames(playerName),
+          ]);
 
         setPlayer(playerData);
         setPlayerGames(gamesData);
       } catch (err) {
-        console.error("Player profile error:", err);
-        setError("Unable to load player profile.");
+        console.error(
+          "Player profile error:",
+          err
+        );
+
+        setError(
+          "Unable to load player profile."
+        );
       } finally {
         setLoading(false);
       }
@@ -36,13 +44,20 @@ function PlayerProfile() {
 
     loadPlayerProfile();
 
-    const interval = setInterval(loadPlayerProfile, 30000);
+    const interval = setInterval(
+      loadPlayerProfile,
+      30000
+    );
 
     return () => clearInterval(interval);
   }, [playerName]);
 
   if (loading) {
-    return <p>Loading player profile...</p>;
+    return (
+      <p>
+        Loading player profile...
+      </p>
+    );
   }
 
   if (error) {
@@ -53,43 +68,57 @@ function PlayerProfile() {
     return <p>Player not found.</p>;
   }
 
-  const sortedByPoints = [...playerGames].sort(
-    (a, b) => b.points - a.points
-  );
+  const sortedByPoints =
+    [...playerGames].sort(
+      (a, b) =>
+        b.points - a.points
+    );
 
   const bestGame =
-    sortedByPoints.length > 0 ? sortedByPoints[0] : null;
+    sortedByPoints.length > 0
+      ? sortedByPoints[0]
+      : null;
 
-  const gamesWithPoints = playerGames.filter(
-    (game) => game.points > 0
-  );
+  const gamesWithPoints =
+    playerGames.filter(
+      (game) =>
+        game.points > 0
+    );
 
   const worstGame =
     gamesWithPoints.length > 0
       ? [...gamesWithPoints].sort(
-          (a, b) => a.points - b.points
+          (a, b) =>
+            a.points - b.points
         )[0]
       : null;
 
-  const totalGamePoints = playerGames.reduce(
-    (total, game) => total + game.points,
-    0
-  );
+  const totalGamePoints =
+    playerGames.reduce(
+      (total, game) =>
+        total + game.points,
+      0
+    );
 
-  const totalGameSpins = playerGames.reduce(
-    (total, game) => total + game.spins,
-    0
-  );
+  const totalGameSpins =
+    playerGames.reduce(
+      (total, game) =>
+        total + game.spins,
+      0
+    );
 
   const averagePointsPerGame =
     playerGames.length > 0
-      ? totalGamePoints / playerGames.length
+      ? totalGamePoints /
+        playerGames.length
       : 0;
 
   return (
     <div>
       <button
-        onClick={() => navigate("/players")}
+        onClick={() =>
+          navigate("/")
+        }
         style={{
           marginBottom: "20px",
           padding: "10px 14px",
@@ -104,6 +133,7 @@ function PlayerProfile() {
       <h1
         style={{
           marginBottom: "6px",
+          color: "#ffffff",
         }}
       >
         👤 {player.player}
@@ -123,39 +153,64 @@ function PlayerProfile() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "1fr 1fr",
+          gridTemplateColumns:
+            "1fr 1fr",
           gap: "12px",
           marginBottom: "20px",
         }}
       >
         <StatBox
           label="Standing"
-          value={`#${player.standings}`}
+          value={
+            player.standings
+              ? `#${player.standings}`
+              : "-"
+          }
         />
 
         <StatBox
           label="Points"
-          value={player.points.toLocaleString()}
+          value={Number(
+            player.points || 0
+          ).toLocaleString()}
         />
 
         <StatBox
           label="Spin Rank"
-          value={`#${player.spinRank}`}
+          value={
+            player.spinRank
+              ? `#${player.spinRank}`
+              : "-"
+          }
         />
 
         <StatBox
           label="Spins"
-          value={player.spins}
+          value={player.spins || 0}
         />
 
         <StatBox
-          label="Points / Spin"
-          value={player.pointsPerSpin}
+          label="SPG"
+          value={formatStat(
+            player.spinsPerGame
+          )}
+        />
+
+        <StatBox
+          label="PPS"
+          value={formatStat(
+            player.pointsPerSpin
+          )}
         />
 
         <StatBox
           label="100s"
-          value={player.hundreds}
+          value={player.hundreds || 0}
+        />
+
+        <StatBox
+          label="Year"
+          value={player.year || 2026}
         />
       </div>
 
@@ -171,6 +226,7 @@ function PlayerProfile() {
         <h2
           style={{
             marginTop: 0,
+            color: "#ffffff",
           }}
         >
           📊 Weekend Summary
@@ -201,7 +257,9 @@ function PlayerProfile() {
 
         <SummaryRow
           label="Average Points / Game"
-          value={averagePointsPerGame.toFixed(1)}
+          value={
+            averagePointsPerGame.toFixed(1)
+          }
         />
       </div>
 
@@ -216,38 +274,54 @@ function PlayerProfile() {
         <h2
           style={{
             marginTop: 0,
+            color: "#ffffff",
           }}
         >
           🎯 Game Breakdown
         </h2>
 
         {games.map((game) => {
-          const stats = playerGames.find(
-            (item) => item.game === game.name
-          );
+          const stats =
+            playerGames.find(
+              (item) =>
+                item.game ===
+                game.name
+            );
 
           return (
             <div
               key={game.id}
               style={{
-                padding: "14px 0",
-                borderBottom: "1px solid #30363d",
+                padding:
+                  "14px 0",
+                borderBottom:
+                  "1px solid #30363d",
               }}
             >
               <div
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
+                  display:
+                    "flex",
+                  justifyContent:
+                    "space-between",
+                  alignItems:
+                    "center",
                 }}
               >
-                <strong>
-                  {game.icon} {game.name}
+                <strong
+                  style={{
+                    color:
+                      "#ffffff",
+                  }}
+                >
+                  {game.icon}{" "}
+                  {game.name}
                 </strong>
 
                 <strong
                   style={{
-                    color: "#f2cc60",
+                    color:
+                      "#f2cc60",
                   }}
                 >
                   {stats
@@ -258,19 +332,28 @@ function PlayerProfile() {
 
               <div
                 style={{
-                  display: "flex",
+                  display:
+                    "flex",
                   gap: "16px",
                   marginTop: "6px",
-                  color: "#8b949e",
+                  color:
+                    "#8b949e",
                   fontSize: "13px",
                 }}
               >
                 <span>
-                  🎲 {stats ? stats.spins : 0} Spins
+                  🎲{" "}
+                  {stats
+                    ? stats.spins
+                    : 0}{" "}
+                  Spins
                 </span>
 
                 <span>
-                  SV: {stats ? stats.spinValue : 0}
+                  SV:{" "}
+                  {stats
+                    ? stats.spinValue
+                    : 0}
                 </span>
               </div>
             </div>
@@ -281,12 +364,17 @@ function PlayerProfile() {
   );
 }
 
-function StatBox({ label, value }) {
+function StatBox({
+  label,
+  value,
+}) {
   return (
     <div
       style={{
-        backgroundColor: "#21262d",
-        border: "1px solid #30363d",
+        backgroundColor:
+          "#21262d",
+        border:
+          "1px solid #30363d",
         borderRadius: "12px",
         padding: "14px",
       }}
@@ -303,8 +391,10 @@ function StatBox({ label, value }) {
 
       <h2
         style={{
-          margin: "6px 0 0 0",
+          margin:
+            "6px 0 0 0",
           fontSize: "22px",
+          color: "#ffffff",
         }}
       >
         {value}
@@ -313,15 +403,20 @@ function StatBox({ label, value }) {
   );
 }
 
-function SummaryRow({ label, value }) {
+function SummaryRow({
+  label,
+  value,
+}) {
   return (
     <div
       style={{
         display: "flex",
-        justifyContent: "space-between",
+        justifyContent:
+          "space-between",
         gap: "20px",
         padding: "10px 0",
-        borderBottom: "1px solid #30363d",
+        borderBottom:
+          "1px solid #30363d",
       }}
     >
       <span
@@ -335,12 +430,23 @@ function SummaryRow({ label, value }) {
       <strong
         style={{
           textAlign: "right",
+          color: "#ffffff",
         }}
       >
         {value}
       </strong>
     </div>
   );
+}
+
+function formatStat(value) {
+  const number = Number(value);
+
+  if (Number.isNaN(number)) {
+    return "0.000";
+  }
+
+  return number.toFixed(3);
 }
 
 export default PlayerProfile;
