@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import {
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 
 import games from "../data/games";
 
@@ -12,7 +16,11 @@ import { getGameStatuses } from "../services/gameStatus";
 
 function GameDetails() {
   const { gameId } = useParams();
-  const navigate = useNavigate();
+const navigate = useNavigate();
+const location = useLocation();
+
+const backTarget =
+  location.state?.fromPlayer || "/games";
 
   const [gameData, setGameData] = useState([]);
   const [matchups, setMatchups] = useState([]);
@@ -238,7 +246,7 @@ function GameDetails() {
       <div>
         <button
           onClick={() =>
-            navigate("/games")
+            navigate(backTarget)
           }
         >
           ← Back
@@ -266,7 +274,7 @@ function GameDetails() {
       <div>
         <button
           onClick={() =>
-            navigate("/games")
+            navigate(backTarget)
           }
         >
           ← Back
@@ -332,7 +340,7 @@ function GameDetails() {
     <div>
       <button
         onClick={() =>
-          navigate("/games")
+          navigate(backTarget)
         }
         style={{
           marginBottom: "20px",

@@ -35,8 +35,6 @@ function getWinnerSide(score1, score2) {
   const result1 = raw1.toUpperCase();
   const result2 = raw2.toUpperCase();
 
-  // Games such as Rock Paper Scissors
-  // can use W / L instead of numeric scores.
   if (result1 === "W" && result2 === "L") {
     return 1;
   }
@@ -71,10 +69,126 @@ function ensureRecord(records, playerName) {
       player: String(playerName).trim(),
       wins: 0,
       losses: 0,
+      headToHead: {},
+      partnerRecords: {},
     };
   }
 
   return records[normalized];
+}
+
+function ensureRelationshipRecord(
+  relationshipMap,
+  playerName
+) {
+  const normalized = normalizeName(playerName);
+
+  if (!normalized) {
+    return null;
+  }
+
+  if (!relationshipMap[normalized]) {
+    relationshipMap[normalized] = {
+      player: String(playerName).trim(),
+      wins: 0,
+      losses: 0,
+    };
+  }
+
+  return relationshipMap[normalized];
+}
+
+function addRelationshipResult(
+  relationshipMap,
+  otherPlayer,
+  won
+) {
+  const record =
+    ensureRelationshipRecord(
+      relationshipMap,
+      otherPlayer
+    );
+
+  if (!record) {
+    return;
+  }
+
+  if (won) {
+    record.wins += 1;
+  } else {
+    record.losses += 1;
+  }
+}
+
+function addPartnerResults(
+  records,
+  teammates,
+  won
+) {
+  teammates.forEach((playerName) => {
+    const playerRecord =
+      ensureRecord(records, playerName);
+
+    if (!playerRecord) {
+      return;
+    }
+
+    teammates.forEach((partnerName) => {
+      if (
+        normalizeName(partnerName) ===
+        normalizeName(playerName)
+      ) {
+        return;
+      }
+
+      addRelationshipResult(
+        playerRecord.partnerRecords,
+        partnerName,
+        won
+      );
+    });
+  });
+}
+
+function addHeadToHeadResults(
+  records,
+  team1Players,
+  team2Players,
+  winnerSide
+) {
+  team1Players.forEach((playerName) => {
+    const playerRecord =
+      ensureRecord(records, playerName);
+
+    if (!playerRecord) {
+      return;
+    }
+
+    team2Players.forEach((opponentName) => {
+      addRelationshipResult(
+        playerRecord.headToHead,
+        opponentName,
+        winnerSide === 1
+      );
+    });
+  });
+
+  team2Players.forEach((playerName) => {
+    const playerRecord =
+      ensureRecord(records, playerName);
+
+    if (!playerRecord) {
+      return;
+    }
+
+    team1Players.forEach((opponentName) => {
+      addRelationshipResult(
+        playerRecord.headToHead,
+        opponentName,
+        winnerSide === 2
+      );
+    });
+  });
 }
 
 function applyResult(
@@ -87,14 +201,12 @@ function applyResult(
     return;
   }
 
-  const players1 = splitTeam(team1);
-  const players2 = splitTeam(team2);
+  const team1Players = splitTeam(team1);
+  const team2Players = splitTeam(team2);
 
-  players1.forEach((playerName) => {
-    const record = ensureRecord(
-      records,
-      playerName
-    );
+  team1Players.forEach((playerName) => {
+    const record =
+      ensureRecord(records, playerName);
 
     if (!record) {
       return;
@@ -107,11 +219,9 @@ function applyResult(
     }
   });
 
-  players2.forEach((playerName) => {
-    const record = ensureRecord(
-      records,
-      playerName
-    );
+  team2Players.forEach((playerName) => {
+    const record =
+      ensureRecord(records, playerName);
 
     if (!record) {
       return;
@@ -123,6 +233,61 @@ function applyResult(
       record.losses += 1;
     }
   });
+
+  addHeadToHeadResults(
+    records,
+    team1Players,
+    team2Players,
+    winnerSide
+  );
+
+  addPartnerResults(
+    records,
+    team1Players,
+    winnerSide === 1
+  );
+
+  addPartnerResults(
+    records,
+    team2Players,
+    winnerSide === 2
+  );
+}
+
+function finalizeRelationshipRecords(
+  relationshipMap
+) {
+  return Object.values(
+    relationshipMap
+  )
+    .map((record) => {
+      const gamesPlayed =
+        record.wins + record.losses;
+
+      const winPct =
+        gamesPlayed > 0
+          ? record.wins / gamesPlayed
+          : 0;
+
+      return {
+        ...record,
+        gamesPlayed,
+        winPct,
+      };
+    })
+    .sort((a, b) => {
+      if (b.gamesPlayed !== a.gamesPlayed) {
+        return b.gamesPlayed - a.gamesPlayed;
+      }
+
+      if (b.winPct !== a.winPct) {
+        return b.winPct - a.winPct;
+      }
+
+      return a.player.localeCompare(
+        b.player
+      );
+    });
 }
 
 function finalizeRecords(records) {
@@ -140,14 +305,19 @@ function finalizeRecords(records) {
         ...record,
         gamesPlayed,
         winPct,
+        headToHead:
+          finalizeRelationshipRecords(
+            record.headToHead
+          ),
+        partnerRecords:
+          finalizeRelationshipRecords(
+            record.partnerRecords
+          ),
       };
     }
   );
 
   return values.map((record) => {
-    // Competition-style ranking:
-    // everyone with the same winning %
-    // receives the same rank.
     const winRank =
       1 +
       values.filter(
@@ -175,9 +345,6 @@ export async function getAllPlayerRecords() {
 
   const records = {};
 
-  // Add every player first so someone who
-  // hasn't completed a matchup yet still
-  // receives a 0-0 record.
   players.forEach((player) => {
     ensureRecord(
       records,
@@ -185,8 +352,6 @@ export async function getAllPlayerRecords() {
     );
   });
 
-  // Regular matchup games, including
-  // numeric-score games and W/L games.
   matchups.forEach((matchup) => {
     if (
       EXCLUDED_GAMES.has(matchup.game)
@@ -194,10 +359,11 @@ export async function getAllPlayerRecords() {
       return;
     }
 
-    const winnerSide = getWinnerSide(
-      matchup.score1,
-      matchup.score2
-    );
+    const winnerSide =
+      getWinnerSide(
+        matchup.score1,
+        matchup.score2
+      );
 
     applyResult(
       records,
@@ -207,15 +373,12 @@ export async function getAllPlayerRecords() {
     );
   });
 
-  // Captain/team games.
-  // Every member of the winning team gets
-  // one win and every member of the losing
-  // team gets one loss.
   captainGames.forEach((game) => {
-    const winnerSide = getWinnerSide(
-      game.score1,
-      game.score2
-    );
+    const winnerSide =
+      getWinnerSide(
+        game.score1,
+        game.score2
+      );
 
     if (!winnerSide) {
       return;
@@ -267,6 +430,8 @@ export async function getPlayerRecord(
       gamesPlayed: 0,
       winPct: 0,
       winRank: 1,
+      headToHead: [],
+      partnerRecords: [],
     }
   );
 }

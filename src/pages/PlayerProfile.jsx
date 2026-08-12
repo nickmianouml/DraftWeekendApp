@@ -12,13 +12,17 @@ function PlayerProfile() {
 
   const [player, setPlayer] = useState(null);
   const [playerGames, setPlayerGames] = useState([]);
+
   const [record, setRecord] = useState({
     wins: 0,
     losses: 0,
     gamesPlayed: 0,
     winPct: 0,
     winRank: 1,
+    headToHead: [],
+    partnerRecords: [],
   });
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -335,6 +339,22 @@ function PlayerProfile() {
         />
       </div>
 
+      <RelationshipSection
+        icon="⚔️"
+        title="Head-to-Head"
+        emptyText="No completed head-to-head matchups yet."
+        records={record.headToHead}
+        prefix="vs"
+      />
+
+      <RelationshipSection
+        icon="🤝"
+        title="Partner Records"
+        emptyText="No completed team matchups yet."
+        records={record.partnerRecords}
+        prefix="with"
+      />
+
       <div
         style={{
           backgroundColor: "#161b22",
@@ -364,7 +384,17 @@ function PlayerProfile() {
             <div
               key={game.id}
               onClick={() =>
-                navigate(`/games/${game.id}`)
+                navigate(
+                  `/games/${game.id}`,
+                  {
+                    state: {
+                      fromPlayer:
+                        `/players/${encodeURIComponent(
+                          player.player
+                        )}`,
+                    },
+                  }
+                )
               }
               style={{
                 padding: "14px 0",
@@ -454,6 +484,107 @@ function PlayerProfile() {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function RelationshipSection({
+  icon,
+  title,
+  records,
+  prefix,
+  emptyText,
+}) {
+  return (
+    <div
+      style={{
+        backgroundColor: "#161b22",
+        border: "1px solid #30363d",
+        borderRadius: "14px",
+        padding: "18px",
+        marginBottom: "20px",
+      }}
+    >
+      <h2
+        style={{
+          marginTop: 0,
+          color: "#ffffff",
+        }}
+      >
+        {icon} {title}
+      </h2>
+
+      {records.length === 0 ? (
+        <p
+          style={{
+            color: "#8b949e",
+            marginBottom: 0,
+          }}
+        >
+          {emptyText}
+        </p>
+      ) : (
+        records.map(
+          (item, index) => (
+            <div
+              key={`${title}-${item.player}`}
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "1fr auto auto",
+                alignItems: "center",
+                gap: "12px",
+                padding: "11px 0",
+                borderBottom:
+                  index ===
+                  records.length - 1
+                    ? "none"
+                    : "1px solid #30363d",
+              }}
+            >
+              <strong
+                style={{
+                  color: "#ffffff",
+                }}
+              >
+                <span
+                  style={{
+                    color: "#8b949e",
+                    fontWeight: "normal",
+                    marginRight: "5px",
+                  }}
+                >
+                  {prefix}
+                </span>
+
+                {item.player}
+              </strong>
+
+              <strong
+                style={{
+                  color: "#f2cc60",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {item.wins}-{item.losses}
+              </strong>
+
+              <span
+                style={{
+                  color: "#8b949e",
+                  minWidth: "48px",
+                  textAlign: "right",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {formatWinPct(
+                  item.winPct
+                )}
+              </span>
+            </div>
+          )
+        )
+      )}
     </div>
   );
 }
