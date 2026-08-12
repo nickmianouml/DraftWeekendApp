@@ -53,6 +53,48 @@ function formatScore(score1, score2) {
   return `Score: ${left || "-"} - ${right || "-"}`;
 }
 
+function getWinnerSide(score1, score2) {
+  const left = String(score1 ?? "")
+    .trim()
+    .toUpperCase();
+
+  const right = String(score2 ?? "")
+    .trim()
+    .toUpperCase();
+
+  if (!left || !right) {
+    return null;
+  }
+
+  if (left === "W" && right === "L") {
+    return "own";
+  }
+
+  if (left === "L" && right === "W") {
+    return "opponent";
+  }
+
+  const leftNumber = Number(left);
+  const rightNumber = Number(right);
+
+  if (
+    Number.isNaN(leftNumber) ||
+    Number.isNaN(rightNumber)
+  ) {
+    return null;
+  }
+
+  if (leftNumber > rightNumber) {
+    return "own";
+  }
+
+  if (rightNumber > leftNumber) {
+    return "opponent";
+  }
+
+  return null;
+}
+
 function PlayerSchedule() {
   const { playerName } = useParams();
   const navigate = useNavigate();
@@ -346,6 +388,14 @@ function buildCaptainScheduleItem(
           ownScore,
           opponentScore
         ),
+        winner: getWinnerSide(
+          ownScore,
+          opponentScore
+        ),
+        winner: getWinnerSide(
+          ownScore,
+          opponentScore
+        ),
       },
     ],
   };
@@ -507,6 +557,10 @@ function buildMatchupScheduleItem(
           ownScore,
           opponentScore
         ),
+        winner: getWinnerSide(
+          ownScore,
+          opponentScore
+        ),
       };
     }),
   };
@@ -622,6 +676,12 @@ function MatchupDisplay({
     );
   }
 
+  const ownWon =
+    matchup.winner === "own";
+
+  const opponentWon =
+    matchup.winner === "opponent";
+
   return (
     <div
       style={{
@@ -633,14 +693,36 @@ function MatchupDisplay({
     >
       <div
         style={{
+          backgroundColor: ownWon
+            ? "rgba(63, 185, 80, 0.12)"
+            : "transparent",
+          border: ownWon
+            ? "1px solid #3fb950"
+            : "1px solid transparent",
+          borderRadius: "9px",
+          padding: "9px 10px",
           textAlign: "center",
-          color: "#ffffff",
+          color: ownWon
+            ? "#3fb950"
+            : "#ffffff",
           fontSize: "14px",
           fontWeight: "bold",
           lineHeight: 1.45,
         }}
       >
         {matchup.ownTeam}
+
+        {ownWon && (
+          <div
+            style={{
+              marginTop: "4px",
+              fontSize: "10px",
+              letterSpacing: "0.5px",
+            }}
+          >
+            WINNER
+          </div>
+        )}
       </div>
 
       <div
@@ -657,14 +739,36 @@ function MatchupDisplay({
 
       <div
         style={{
+          backgroundColor: opponentWon
+            ? "rgba(63, 185, 80, 0.12)"
+            : "transparent",
+          border: opponentWon
+            ? "1px solid #3fb950"
+            : "1px solid transparent",
+          borderRadius: "9px",
+          padding: "9px 10px",
           textAlign: "center",
-          color: "#ffffff",
+          color: opponentWon
+            ? "#3fb950"
+            : "#ffffff",
           fontSize: "14px",
           fontWeight: "bold",
           lineHeight: 1.45,
         }}
       >
         {matchup.opponentTeam}
+
+        {opponentWon && (
+          <div
+            style={{
+              marginTop: "4px",
+              fontSize: "10px",
+              letterSpacing: "0.5px",
+            }}
+          >
+            WINNER
+          </div>
+        )}
       </div>
 
       <div

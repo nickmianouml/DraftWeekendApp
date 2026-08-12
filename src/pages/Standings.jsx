@@ -3,12 +3,14 @@ import { Link } from "react-router-dom";
 
 import { getPlayers } from "../services/players";
 import { getLiveData } from "../services/live";
+import { getAllPlayerRecords } from "../services/playerRecord";
 
 import "../styles/standingsPage.css";
 
 function Standings() {
   const [standings, setStandings] = useState([]);
   const [live, setLive] = useState(null);
+  const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -18,11 +20,15 @@ function Standings() {
       try {
         setError("");
 
-        const [playersData, liveData] =
-          await Promise.all([
-            getPlayers(),
-            getLiveData(),
-          ]);
+        const [
+          playersData,
+          liveData,
+          recordsData,
+        ] = await Promise.all([
+          getPlayers(),
+          getLiveData(),
+          getAllPlayerRecords(),
+        ]);
 
         const sortedStandings =
           [...playersData].sort((a, b) => {
@@ -35,6 +41,7 @@ function Standings() {
 
         setStandings(sortedStandings);
         setLive(liveData);
+        setRecords(recordsData);
         setLastUpdated(new Date());
       } catch (err) {
         console.error(
@@ -205,6 +212,12 @@ function Standings() {
                   Number(player.points || 0)
               );
 
+            const record =
+              findPlayerRecord(
+                records,
+                player.player
+              );
+
             return (
               <Link
                 key={player.player}
@@ -285,6 +298,22 @@ function Standings() {
                         >
                           Points
                         </span>
+                      </div>
+
+                      <div
+                        style={{
+                          marginTop: "7px",
+                          color: "#8b949e",
+                          fontSize: "11px",
+                          fontWeight: "bold",
+                          textAlign: "center",
+                        }}
+                      >
+                        {record.wins}-{record.losses}
+                        {" · "}
+                        {formatWinPct(record.winPct)}
+                        {" · "}
+                        Win Rank #{record.winRank}
                       </div>
                     </div>
 
@@ -458,6 +487,31 @@ function PlayerStat({
   );
 }
 
+function normalizeName(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function findPlayerRecord(
+  records,
+  playerName
+) {
+  return (
+    records.find(
+      (record) =>
+        normalizeName(record.player) ===
+        normalizeName(playerName)
+    ) || {
+      wins: 0,
+      losses: 0,
+      winPct: 0,
+      winRank: 1,
+    }
+  );
+}
+
 function getRankDisplay(rank) {
   if (rank === 1) {
     return "🥇";
@@ -496,6 +550,16 @@ function formatPPS(value) {
   }
 
   return number.toFixed(3);
+}
+
+function formatWinPct(value) {
+  const number = Number(value);
+
+  if (Number.isNaN(number)) {
+    return "0.0%";
+  }
+
+  return `${(number * 100).toFixed(1)}%`;
 }
 
 export default Standings;

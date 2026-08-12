@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { getPlayer } from "../services/players";
 import { getPlayerGames } from "../services/playerGames";
+import { getPlayerRecord } from "../services/playerRecord";
 import games from "../data/games";
 
 function PlayerProfile() {
@@ -11,6 +12,13 @@ function PlayerProfile() {
 
   const [player, setPlayer] = useState(null);
   const [playerGames, setPlayerGames] = useState([]);
+  const [record, setRecord] = useState({
+    wins: 0,
+    losses: 0,
+    gamesPlayed: 0,
+    winPct: 0,
+    winRank: 1,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -20,14 +28,19 @@ function PlayerProfile() {
         setError("");
         setLoading(true);
 
-        const [playerData, gamesData] =
-          await Promise.all([
-            getPlayer(playerName),
-            getPlayerGames(playerName),
-          ]);
+        const [
+          playerData,
+          gamesData,
+          recordData,
+        ] = await Promise.all([
+          getPlayer(playerName),
+          getPlayerGames(playerName),
+          getPlayerRecord(playerName),
+        ]);
 
         setPlayer(playerData);
         setPlayerGames(gamesData);
+        setRecord(recordData);
       } catch (err) {
         console.error(
           "Player profile error:",
@@ -181,6 +194,33 @@ function PlayerProfile() {
       >
         📅 View My Schedule
       </button>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns:
+            "repeat(3, 1fr)",
+          gap: "10px",
+          marginBottom: "20px",
+        }}
+      >
+        <RecordBox
+          label="Record"
+          value={`${record.wins}-${record.losses}`}
+        />
+
+        <RecordBox
+          label="Win %"
+          value={formatWinPct(
+            record.winPct
+          )}
+        />
+
+        <RecordBox
+          label="Win Rank"
+          value={`#${record.winRank}`}
+        />
+      </div>
 
       <div
         style={{
@@ -418,6 +458,45 @@ function PlayerProfile() {
   );
 }
 
+function RecordBox({
+  label,
+  value,
+}) {
+  return (
+    <div
+      style={{
+        backgroundColor: "#161b22",
+        border: "1px solid #30363d",
+        borderRadius: "12px",
+        padding: "12px 8px",
+        textAlign: "center",
+      }}
+    >
+      <span
+        style={{
+          display: "block",
+          color: "#8b949e",
+          fontSize: "11px",
+          fontWeight: "bold",
+          textTransform: "uppercase",
+          marginBottom: "7px",
+        }}
+      >
+        {label}
+      </span>
+
+      <strong
+        style={{
+          color: "#ffffff",
+          fontSize: "18px",
+        }}
+      >
+        {value}
+      </strong>
+    </div>
+  );
+}
+
 function StatBox({
   label,
   value,
@@ -501,6 +580,16 @@ function formatStat(value) {
   }
 
   return number.toFixed(3);
+}
+
+function formatWinPct(value) {
+  const number = Number(value);
+
+  if (Number.isNaN(number)) {
+    return "0.0%";
+  }
+
+  return `${(number * 100).toFixed(1)}%`;
 }
 
 export default PlayerProfile;

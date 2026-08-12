@@ -506,6 +506,39 @@ function normalizeName(value) {
     .replace(/\s+/g, " ");
 }
 
+function getWinnerSide(score1, score2) {
+  const raw1 = String(score1 ?? "").trim();
+  const raw2 = String(score2 ?? "").trim();
+
+  if (!raw1 || !raw2) {
+    return null;
+  }
+
+  const result1 = raw1.toUpperCase();
+  const result2 = raw2.toUpperCase();
+
+  if (result1 === "W" && result2 === "L") {
+    return 1;
+  }
+
+  if (result1 === "L" && result2 === "W") {
+    return 2;
+  }
+
+  const number1 = Number(raw1);
+  const number2 = Number(raw2);
+
+  if (
+    Number.isNaN(number1) ||
+    Number.isNaN(number2) ||
+    number1 === number2
+  ) {
+    return null;
+  }
+
+  return number1 > number2 ? 1 : 2;
+}
+
 function CaptainTeams({
   captainGame,
   gameName,
@@ -524,6 +557,12 @@ function CaptainTeams({
 
   const isHRDerby =
     gameName === "HR Derby";
+
+  const winnerSide =
+    getWinnerSide(
+      captainGame.score1,
+      captainGame.score2
+    );
 
   const homeRunTotals = {};
 
@@ -633,6 +672,9 @@ function CaptainTeams({
           getHomeRuns={
             getHomeRuns
           }
+          isWinner={
+            winnerSide === 1
+          }
         />
 
         <div
@@ -662,6 +704,9 @@ function CaptainTeams({
           }
           getHomeRuns={
             getHomeRuns
+          }
+          isWinner={
+            winnerSide === 2
           }
         />
       </div>
@@ -717,6 +762,7 @@ function TeamRoster({
   players,
   showHomeRuns,
   getHomeRuns,
+  isWinner = false,
 }) {
   const captainHomeRuns =
     showHomeRuns
@@ -727,6 +773,14 @@ function TeamRoster({
     <div
       style={{
         textAlign: "center",
+        backgroundColor: isWinner
+          ? "rgba(46, 160, 67, 0.14)"
+          : "transparent",
+        border: isWinner
+          ? "1px solid #3fb950"
+          : "1px solid transparent",
+        borderRadius: "10px",
+        padding: "10px",
       }}
     >
       <div
@@ -773,11 +827,27 @@ function TeamRoster({
           color: "#8b949e",
           fontSize: "11px",
           fontWeight: "bold",
-          marginBottom: "12px",
+          marginBottom: isWinner
+            ? "4px"
+            : "12px",
         }}
       >
         CAPTAIN
       </span>
+
+      {isWinner && (
+        <span
+          style={{
+            display: "block",
+            color: "#3fb950",
+            fontSize: "10px",
+            fontWeight: "bold",
+            marginBottom: "10px",
+          }}
+        >
+          WINNER
+        </span>
+      )}
 
       {players
         .slice(1)
@@ -1845,6 +1915,18 @@ function MatchupSection({
               matchup.status
             );
 
+          const winnerSide =
+            getWinnerSide(
+              matchup.score1,
+              matchup.score2
+            );
+
+          const team1Won =
+            winnerSide === 1;
+
+          const team2Won =
+            winnerSide === 2;
+
           return (
             <div
               key={`${matchup.team1}-${matchup.team2}-${index}`}
@@ -1869,7 +1951,7 @@ function MatchupSection({
                   gridTemplateColumns:
                     "1fr 70px 1fr",
                   alignItems:
-                    "center",
+                    "stretch",
                   gap: "8px",
                 }}
               >
@@ -1877,9 +1959,28 @@ function MatchupSection({
                   style={{
                     textAlign:
                       "center",
+                    backgroundColor:
+                      team1Won
+                        ? "rgba(46, 160, 67, 0.14)"
+                        : "transparent",
+                    border:
+                      team1Won
+                        ? "1px solid #3fb950"
+                        : "1px solid transparent",
+                    borderRadius:
+                      "10px",
+                    padding:
+                      "10px 6px",
                   }}
                 >
-                  <strong>
+                  <strong
+                    style={{
+                      color:
+                        team1Won
+                          ? "#3fb950"
+                          : "white",
+                    }}
+                  >
                     {
                       matchup.team1
                     }
@@ -1891,16 +1992,42 @@ function MatchupSection({
                         "28px",
                       marginTop:
                         "4px",
+                      color:
+                        team1Won
+                          ? "#3fb950"
+                          : "white",
                     }}
                   >
                     {matchup.score1 ||
                       "-"}
                   </div>
+
+                  {team1Won && (
+                    <div
+                      style={{
+                        marginTop:
+                          "4px",
+                        color:
+                          "#3fb950",
+                        fontSize:
+                          "10px",
+                        fontWeight:
+                          "bold",
+                      }}
+                    >
+                      WINNER
+                    </div>
+                  )}
                 </div>
 
                 <div
                   style={{
                     textAlign:
+                      "center",
+                    display: "flex",
+                    flexDirection:
+                      "column",
+                    justifyContent:
                       "center",
                   }}
                 >
@@ -1933,9 +2060,28 @@ function MatchupSection({
                   style={{
                     textAlign:
                       "center",
+                    backgroundColor:
+                      team2Won
+                        ? "rgba(46, 160, 67, 0.14)"
+                        : "transparent",
+                    border:
+                      team2Won
+                        ? "1px solid #3fb950"
+                        : "1px solid transparent",
+                    borderRadius:
+                      "10px",
+                    padding:
+                      "10px 6px",
                   }}
                 >
-                  <strong>
+                  <strong
+                    style={{
+                      color:
+                        team2Won
+                          ? "#3fb950"
+                          : "white",
+                    }}
+                  >
                     {
                       matchup.team2
                     }
@@ -1947,11 +2093,32 @@ function MatchupSection({
                         "28px",
                       marginTop:
                         "4px",
+                      color:
+                        team2Won
+                          ? "#3fb950"
+                          : "white",
                     }}
                   >
                     {matchup.score2 ||
                       "-"}
                   </div>
+
+                  {team2Won && (
+                    <div
+                      style={{
+                        marginTop:
+                          "4px",
+                        color:
+                          "#3fb950",
+                        fontSize:
+                          "10px",
+                        fontWeight:
+                          "bold",
+                      }}
+                    >
+                      WINNER
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
