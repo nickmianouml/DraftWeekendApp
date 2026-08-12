@@ -7,13 +7,26 @@ import { getPlayerRecord } from "../services/playerRecord";
 import games from "../data/games";
 
 function PlayerProfile() {
-  const { playerName } = useParams();
-  const navigate = useNavigate();
+  const { playerName } =
+    useParams();
 
-  const [player, setPlayer] = useState(null);
-  const [playerGames, setPlayerGames] = useState([]);
+  const navigate =
+    useNavigate();
 
-  const [record, setRecord] = useState({
+  const [
+    player,
+    setPlayer,
+  ] = useState(null);
+
+  const [
+    playerGames,
+    setPlayerGames,
+  ] = useState([]);
+
+  const [
+    record,
+    setRecord,
+  ] = useState({
     wins: 0,
     losses: 0,
     gamesPlayed: 0,
@@ -23,50 +36,119 @@ function PlayerProfile() {
     partnerRecords: [],
   });
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
+
+  const [
+    error,
+    setError,
+  ] = useState("");
 
   useEffect(() => {
-    async function loadPlayerProfile() {
+    let active = true;
+
+    async function loadPlayerProfile(
+      showLoading = false
+    ) {
       try {
-        setError("");
-        setLoading(true);
+        if (showLoading) {
+          setLoading(true);
+        }
 
         const [
           playerData,
           gamesData,
           recordData,
         ] = await Promise.all([
-          getPlayer(playerName),
-          getPlayerGames(playerName),
-          getPlayerRecord(playerName),
+          getPlayer(
+            playerName
+          ),
+
+          getPlayerGames(
+            playerName
+          ),
+
+          getPlayerRecord(
+            playerName
+          ),
         ]);
 
-        setPlayer(playerData);
-        setPlayerGames(gamesData);
-        setRecord(recordData);
+        if (!active) {
+          return;
+        }
+
+        setPlayer(
+          playerData
+        );
+
+        setPlayerGames(
+          gamesData
+        );
+
+        setRecord(
+          recordData
+        );
+
+        setError("");
       } catch (err) {
         console.error(
           "Player profile error:",
           err
         );
 
-        setError(
-          "Unable to load player profile."
-        );
+        /*
+          Keep existing data visible
+          if only a background refresh
+          fails.
+        */
+        if (
+          active &&
+          !player
+        ) {
+          setError(
+            "Unable to load player profile."
+          );
+        }
       } finally {
-        setLoading(false);
+        if (
+          active &&
+          showLoading
+        ) {
+          setLoading(false);
+        }
       }
     }
 
-    loadPlayerProfile();
-
-    const interval = setInterval(
-      loadPlayerProfile,
-      30000
+    /*
+      Initial load.
+    */
+    loadPlayerProfile(
+      true
     );
 
-    return () => clearInterval(interval);
+    /*
+      Silent background refresh.
+      The page stays rendered.
+    */
+    const interval =
+      setInterval(
+        () => {
+          loadPlayerProfile(
+            false
+          );
+        },
+        30000
+      );
+
+    return () => {
+      active = false;
+
+      clearInterval(
+        interval
+      );
+    };
   }, [playerName]);
 
   if (loading) {
@@ -78,61 +160,89 @@ function PlayerProfile() {
   }
 
   if (error) {
-    return <p>{error}</p>;
+    return (
+      <p>
+        {error}
+      </p>
+    );
   }
 
   if (!player) {
-    return <p>Player not found.</p>;
+    return (
+      <p>
+        Player not found.
+      </p>
+    );
   }
 
   const playedGames =
     playerGames.filter(
       (game) =>
-        Number(game.spins || 0) > 0 ||
-        Number(game.points || 0) > 0
+        Number(
+          game.spins || 0
+        ) > 0 ||
+        Number(
+          game.points || 0
+        ) > 0
     );
 
   const sortedByPoints =
     [...playedGames].sort(
       (a, b) =>
-        b.points - a.points
+        b.points -
+        a.points
     );
 
   const bestGame =
-    sortedByPoints.length > 0
+    sortedByPoints.length >
+    0
       ? sortedByPoints[0]
       : null;
 
   const gamesWithPoints =
     playedGames.filter(
       (game) =>
-        game.points > 0
+        game.points >
+        0
     );
 
   const worstGame =
-    gamesWithPoints.length > 0
-      ? [...gamesWithPoints].sort(
+    gamesWithPoints.length >
+    0
+      ? [
+          ...gamesWithPoints,
+        ].sort(
           (a, b) =>
-            a.points - b.points
+            a.points -
+            b.points
         )[0]
       : null;
 
   const totalGamePoints =
     playedGames.reduce(
-      (total, game) =>
-        total + game.points,
+      (
+        total,
+        game
+      ) =>
+        total +
+        game.points,
       0
     );
 
   const totalGameSpins =
     playedGames.reduce(
-      (total, game) =>
-        total + game.spins,
+      (
+        total,
+        game
+      ) =>
+        total +
+        game.spins,
       0
     );
 
   const averagePointsPerGame =
-    playedGames.length > 0
+    playedGames.length >
+    0
       ? totalGamePoints /
         playedGames.length
       : 0;
@@ -144,11 +254,20 @@ function PlayerProfile() {
           navigate("/")
         }
         style={{
-          marginBottom: "20px",
-          padding: "10px 14px",
-          borderRadius: "8px",
-          border: "none",
-          cursor: "pointer",
+          marginBottom:
+            "20px",
+
+          padding:
+            "10px 14px",
+
+          borderRadius:
+            "8px",
+
+          border:
+            "none",
+
+          cursor:
+            "pointer",
         }}
       >
         ← Back
@@ -156,19 +275,30 @@ function PlayerProfile() {
 
       <h1
         style={{
-          marginBottom: "6px",
-          color: "#ffffff",
+          marginBottom:
+            "6px",
+
+          color:
+            "#ffffff",
         }}
       >
-        👤 {player.player}
+        👤{" "}
+        {player.player}
       </h1>
 
       <p
         style={{
-          color: "#3fb950",
-          marginTop: 0,
-          marginBottom: "14px",
-          fontWeight: "bold",
+          color:
+            "#3fb950",
+
+          marginTop:
+            0,
+
+          marginBottom:
+            "14px",
+
+          fontWeight:
+            "bold",
         }}
       >
         ● LIVE
@@ -183,17 +313,38 @@ function PlayerProfile() {
           )
         }
         style={{
-          width: "100%",
-          backgroundColor: "#21262d",
-          color: "#ffffff",
-          border: "1px solid #30363d",
-          borderRadius: "12px",
-          padding: "14px",
-          marginBottom: "20px",
-          cursor: "pointer",
-          fontSize: "15px",
-          fontWeight: "bold",
-          textAlign: "center",
+          width:
+            "100%",
+
+          backgroundColor:
+            "#21262d",
+
+          color:
+            "#ffffff",
+
+          border:
+            "1px solid #30363d",
+
+          borderRadius:
+            "12px",
+
+          padding:
+            "14px",
+
+          marginBottom:
+            "20px",
+
+          cursor:
+            "pointer",
+
+          fontSize:
+            "15px",
+
+          fontWeight:
+            "bold",
+
+          textAlign:
+            "center",
         }}
       >
         📅 View My Schedule
@@ -201,11 +352,17 @@ function PlayerProfile() {
 
       <div
         style={{
-          display: "grid",
+          display:
+            "grid",
+
           gridTemplateColumns:
             "repeat(3, 1fr)",
-          gap: "10px",
-          marginBottom: "20px",
+
+          gap:
+            "10px",
+
+          marginBottom:
+            "20px",
         }}
       >
         <RecordBox
@@ -215,9 +372,11 @@ function PlayerProfile() {
 
         <RecordBox
           label="Win %"
-          value={formatWinPct(
-            record.winPct
-          )}
+          value={
+            formatWinPct(
+              record.winPct
+            )
+          }
         />
 
         <RecordBox
@@ -228,11 +387,17 @@ function PlayerProfile() {
 
       <div
         style={{
-          display: "grid",
+          display:
+            "grid",
+
           gridTemplateColumns:
             "1fr 1fr",
-          gap: "12px",
-          marginBottom: "20px",
+
+          gap:
+            "12px",
+
+          marginBottom:
+            "20px",
         }}
       >
         <StatBox
@@ -246,9 +411,12 @@ function PlayerProfile() {
 
         <StatBox
           label="Points"
-          value={Number(
-            player.points || 0
-          ).toLocaleString()}
+          value={
+            Number(
+              player.points ||
+                0
+            ).toLocaleString()
+          }
         />
 
         <StatBox
@@ -262,47 +430,72 @@ function PlayerProfile() {
 
         <StatBox
           label="Spins"
-          value={player.spins || 0}
+          value={
+            player.spins ||
+            0
+          }
         />
 
         <StatBox
           label="SPG"
-          value={formatStat(
-            player.spinsPerGame
-          )}
+          value={
+            formatStat(
+              player.spinsPerGame
+            )
+          }
         />
 
         <StatBox
           label="PPS"
-          value={formatStat(
-            player.pointsPerSpin
-          )}
+          value={
+            formatStat(
+              player.pointsPerSpin
+            )
+          }
         />
 
         <StatBox
           label="100s"
-          value={player.hundreds || 0}
+          value={
+            player.hundreds ||
+            0
+          }
         />
 
         <StatBox
           label="Year"
-          value={player.year || 2026}
+          value={
+            player.year ||
+            2026
+          }
         />
       </div>
 
       <div
         style={{
-          backgroundColor: "#161b22",
-          border: "1px solid #30363d",
-          borderRadius: "14px",
-          padding: "18px",
-          marginBottom: "20px",
+          backgroundColor:
+            "#161b22",
+
+          border:
+            "1px solid #30363d",
+
+          borderRadius:
+            "14px",
+
+          padding:
+            "18px",
+
+          marginBottom:
+            "20px",
         }}
       >
         <h2
           style={{
-            marginTop: 0,
-            color: "#ffffff",
+            marginTop:
+              0,
+
+            color:
+              "#ffffff",
           }}
         >
           📊 Weekend Summary
@@ -328,13 +521,17 @@ function PlayerProfile() {
 
         <SummaryRow
           label="Game Spins"
-          value={totalGameSpins}
+          value={
+            totalGameSpins
+          }
         />
 
         <SummaryRow
           label="Average Points / Game"
           value={
-            averagePointsPerGame.toFixed(1)
+            averagePointsPerGame.toFixed(
+              1
+            )
           }
         />
       </div>
@@ -343,7 +540,10 @@ function PlayerProfile() {
         icon="⚔️"
         title="Head-to-Head"
         emptyText="No completed head-to-head matchups yet."
-        records={record.headToHead}
+        records={
+          record.headToHead ||
+          []
+        }
         prefix="vs"
       />
 
@@ -351,138 +551,187 @@ function PlayerProfile() {
         icon="🤝"
         title="Partner Records"
         emptyText="No completed team matchups yet."
-        records={record.partnerRecords}
+        records={
+          record.partnerRecords ||
+          []
+        }
         prefix="with"
       />
 
       <div
         style={{
-          backgroundColor: "#161b22",
-          border: "1px solid #30363d",
-          borderRadius: "14px",
-          padding: "18px",
+          backgroundColor:
+            "#161b22",
+
+          border:
+            "1px solid #30363d",
+
+          borderRadius:
+            "14px",
+
+          padding:
+            "18px",
         }}
       >
         <h2
           style={{
-            marginTop: 0,
-            color: "#ffffff",
+            marginTop:
+              0,
+
+            color:
+              "#ffffff",
           }}
         >
           🎯 Game Breakdown
         </h2>
 
-        {games.map((game) => {
-          const stats =
-            playerGames.find(
-              (item) =>
-                item.game ===
-                game.name
-            );
+        {games.map(
+          (game) => {
+            const stats =
+              playerGames.find(
+                (item) =>
+                  item.game ===
+                  game.name
+              );
 
-          return (
-            <div
-              key={game.id}
-              onClick={() =>
-                navigate(
-                  `/games/${game.id}`,
-                  {
-                    state: {
-                      fromPlayer:
-                        `/players/${encodeURIComponent(
-                          player.player
-                        )}`,
-                    },
-                  }
-                )
-              }
-              style={{
-                padding: "14px 0",
-                borderBottom:
-                  "1px solid #30363d",
-                cursor: "pointer",
-              }}
-            >
+            return (
               <div
+                key={
+                  game.id
+                }
+                onClick={() =>
+                  navigate(
+                    `/games/${game.id}`,
+                    {
+                      state: {
+                        fromPlayer:
+                          `/players/${encodeURIComponent(
+                            player.player
+                          )}`,
+                      },
+                    }
+                  )
+                }
                 style={{
-                  display:
-                    "flex",
-                  justifyContent:
-                    "space-between",
-                  alignItems:
-                    "center",
-                  gap: "12px",
+                  padding:
+                    "14px 0",
+
+                  borderBottom:
+                    "1px solid #30363d",
+
+                  cursor:
+                    "pointer",
                 }}
               >
-                <strong
-                  style={{
-                    color:
-                      "#ffffff",
-                  }}
-                >
-                  {game.icon}{" "}
-                  {game.name}
-                </strong>
-
                 <div
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "10px",
+                    display:
+                      "flex",
+
+                    justifyContent:
+                      "space-between",
+
+                    alignItems:
+                      "center",
+
+                    gap:
+                      "12px",
                   }}
                 >
                   <strong
                     style={{
                       color:
-                        "#f2cc60",
+                        "#ffffff",
                     }}
                   >
-                    {stats
-                      ? `${stats.points.toLocaleString()} pts`
-                      : "0 pts"}
+                    {
+                      game.icon
+                    }{" "}
+                    {
+                      game.name
+                    }
                   </strong>
 
-                  <span
+                  <div
                     style={{
-                      color: "#8b949e",
-                      fontSize: "22px",
-                      lineHeight: 1,
+                      display:
+                        "flex",
+
+                      alignItems:
+                        "center",
+
+                      gap:
+                        "10px",
                     }}
                   >
-                    ›
+                    <strong
+                      style={{
+                        color:
+                          "#f2cc60",
+                      }}
+                    >
+                      {stats
+                        ? `${Number(
+                            stats.points ||
+                              0
+                          ).toLocaleString()} pts`
+                        : "0 pts"}
+                    </strong>
+
+                    <span
+                      style={{
+                        color:
+                          "#8b949e",
+
+                        fontSize:
+                          "22px",
+
+                        lineHeight:
+                          1,
+                      }}
+                    >
+                      ›
+                    </span>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display:
+                      "flex",
+
+                    gap:
+                      "16px",
+
+                    marginTop:
+                      "6px",
+
+                    color:
+                      "#8b949e",
+
+                    fontSize:
+                      "13px",
+                  }}
+                >
+                  <span>
+                    🎡{" "}
+                    {stats
+                      ? stats.spins
+                      : 0}{" "}
+                    Spins
+                  </span>
+
+                  <span>
+                    SV:{" "}
+                    {stats
+                      ? stats.spinValue
+                      : 0}
                   </span>
                 </div>
               </div>
-
-              <div
-                style={{
-                  display:
-                    "flex",
-                  gap: "16px",
-                  marginTop: "6px",
-                  color:
-                    "#8b949e",
-                  fontSize: "13px",
-                }}
-              >
-                <span>
-                  🎡{" "}
-                  {stats
-                    ? stats.spins
-                    : 0}{" "}
-                  Spins
-                </span>
-
-                <span>
-                  SV:{" "}
-                  {stats
-                    ? stats.spinValue
-                    : 0}
-                </span>
-              </div>
-            </div>
-          );
-        })}
+            );
+          }
+        )}
       </div>
     </div>
   );
@@ -498,83 +747,131 @@ function RelationshipSection({
   return (
     <div
       style={{
-        backgroundColor: "#161b22",
-        border: "1px solid #30363d",
-        borderRadius: "14px",
-        padding: "18px",
-        marginBottom: "20px",
+        backgroundColor:
+          "#161b22",
+
+        border:
+          "1px solid #30363d",
+
+        borderRadius:
+          "14px",
+
+        padding:
+          "18px",
+
+        marginBottom:
+          "20px",
       }}
     >
       <h2
         style={{
-          marginTop: 0,
-          color: "#ffffff",
+          marginTop:
+            0,
+
+          color:
+            "#ffffff",
         }}
       >
         {icon} {title}
       </h2>
 
-      {records.length === 0 ? (
+      {records.length ===
+      0 ? (
         <p
           style={{
-            color: "#8b949e",
-            marginBottom: 0,
+            color:
+              "#8b949e",
+
+            marginBottom:
+              0,
           }}
         >
           {emptyText}
         </p>
       ) : (
         records.map(
-          (item, index) => (
+          (
+            item,
+            index
+          ) => (
             <div
               key={`${title}-${item.player}`}
               style={{
-                display: "grid",
+                display:
+                  "grid",
+
                 gridTemplateColumns:
                   "1fr auto auto",
-                alignItems: "center",
-                gap: "12px",
-                padding: "11px 0",
+
+                alignItems:
+                  "center",
+
+                gap:
+                  "12px",
+
+                padding:
+                  "11px 0",
+
                 borderBottom:
                   index ===
-                  records.length - 1
+                  records.length -
+                    1
                     ? "none"
                     : "1px solid #30363d",
               }}
             >
               <strong
                 style={{
-                  color: "#ffffff",
+                  color:
+                    "#ffffff",
                 }}
               >
                 <span
                   style={{
-                    color: "#8b949e",
-                    fontWeight: "normal",
-                    marginRight: "5px",
+                    color:
+                      "#8b949e",
+
+                    fontWeight:
+                      "normal",
+
+                    marginRight:
+                      "5px",
                   }}
                 >
                   {prefix}
                 </span>
 
-                {item.player}
+                {
+                  item.player
+                }
               </strong>
 
               <strong
                 style={{
-                  color: "#f2cc60",
-                  whiteSpace: "nowrap",
+                  color:
+                    "#f2cc60",
+
+                  whiteSpace:
+                    "nowrap",
                 }}
               >
-                {item.wins}-{item.losses}
+                {item.wins}-
+                {item.losses}
               </strong>
 
               <span
                 style={{
-                  color: "#8b949e",
-                  minWidth: "48px",
-                  textAlign: "right",
-                  whiteSpace: "nowrap",
+                  color:
+                    "#8b949e",
+
+                  minWidth:
+                    "48px",
+
+                  textAlign:
+                    "right",
+
+                  whiteSpace:
+                    "nowrap",
                 }}
               >
                 {formatWinPct(
@@ -596,21 +893,41 @@ function RecordBox({
   return (
     <div
       style={{
-        backgroundColor: "#161b22",
-        border: "1px solid #30363d",
-        borderRadius: "12px",
-        padding: "12px 8px",
-        textAlign: "center",
+        backgroundColor:
+          "#161b22",
+
+        border:
+          "1px solid #30363d",
+
+        borderRadius:
+          "12px",
+
+        padding:
+          "12px 8px",
+
+        textAlign:
+          "center",
       }}
     >
       <span
         style={{
-          display: "block",
-          color: "#8b949e",
-          fontSize: "11px",
-          fontWeight: "bold",
-          textTransform: "uppercase",
-          marginBottom: "7px",
+          display:
+            "block",
+
+          color:
+            "#8b949e",
+
+          fontSize:
+            "11px",
+
+          fontWeight:
+            "bold",
+
+          textTransform:
+            "uppercase",
+
+          marginBottom:
+            "7px",
         }}
       >
         {label}
@@ -618,8 +935,11 @@ function RecordBox({
 
       <strong
         style={{
-          color: "#ffffff",
-          fontSize: "18px",
+          color:
+            "#ffffff",
+
+          fontSize:
+            "18px",
         }}
       >
         {value}
@@ -637,17 +957,27 @@ function StatBox({
       style={{
         backgroundColor:
           "#21262d",
+
         border:
           "1px solid #30363d",
-        borderRadius: "12px",
-        padding: "14px",
+
+        borderRadius:
+          "12px",
+
+        padding:
+          "14px",
       }}
     >
       <p
         style={{
-          margin: 0,
-          color: "#8b949e",
-          fontSize: "13px",
+          margin:
+            0,
+
+          color:
+            "#8b949e",
+
+          fontSize:
+            "13px",
         }}
       >
         {label}
@@ -657,8 +987,12 @@ function StatBox({
         style={{
           margin:
             "6px 0 0 0",
-          fontSize: "22px",
-          color: "#ffffff",
+
+          fontSize:
+            "22px",
+
+          color:
+            "#ffffff",
         }}
       >
         {value}
@@ -674,18 +1008,26 @@ function SummaryRow({
   return (
     <div
       style={{
-        display: "flex",
+        display:
+          "flex",
+
         justifyContent:
           "space-between",
-        gap: "20px",
-        padding: "10px 0",
+
+        gap:
+          "20px",
+
+        padding:
+          "10px 0",
+
         borderBottom:
           "1px solid #30363d",
       }}
     >
       <span
         style={{
-          color: "#8b949e",
+          color:
+            "#8b949e",
         }}
       >
         {label}
@@ -693,8 +1035,11 @@ function SummaryRow({
 
       <strong
         style={{
-          textAlign: "right",
-          color: "#ffffff",
+          textAlign:
+            "right",
+
+          color:
+            "#ffffff",
         }}
       >
         {value}
@@ -703,24 +1048,42 @@ function SummaryRow({
   );
 }
 
-function formatStat(value) {
-  const number = Number(value);
+function formatStat(
+  value
+) {
+  const number =
+    Number(value);
 
-  if (Number.isNaN(number)) {
+  if (
+    Number.isNaN(
+      number
+    )
+  ) {
     return "0.000";
   }
 
-  return number.toFixed(3);
+  return number.toFixed(
+    3
+  );
 }
 
-function formatWinPct(value) {
-  const number = Number(value);
+function formatWinPct(
+  value
+) {
+  const number =
+    Number(value);
 
-  if (Number.isNaN(number)) {
+  if (
+    Number.isNaN(
+      number
+    )
+  ) {
     return "0.0%";
   }
 
-  return `${(number * 100).toFixed(1)}%`;
+  return `${(
+    number * 100
+  ).toFixed(1)}%`;
 }
 
 export default PlayerProfile;

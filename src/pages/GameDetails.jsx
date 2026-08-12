@@ -16,11 +16,11 @@ import { getGameStatuses } from "../services/gameStatus";
 
 function GameDetails() {
   const { gameId } = useParams();
-const navigate = useNavigate();
-const location = useLocation();
+  const navigate = useNavigate();
+  const location = useLocation();
 
-const backTarget =
-  location.state?.fromPlayer || "/games";
+  const backTarget =
+    location.state?.fromPlayer || "/games";
 
   const [gameData, setGameData] = useState([]);
   const [matchups, setMatchups] = useState([]);
@@ -515,22 +515,42 @@ function normalizeName(value) {
 }
 
 function getWinnerSide(score1, score2) {
-  const raw1 = String(score1 ?? "").trim();
-  const raw2 = String(score2 ?? "").trim();
+  const raw1 =
+    String(score1 ?? "").trim();
+
+  const raw2 =
+    String(score2 ?? "").trim();
 
   if (!raw1 || !raw2) {
     return null;
   }
 
-  const result1 = raw1.toUpperCase();
-  const result2 = raw2.toUpperCase();
+  const result1 =
+    raw1.toUpperCase();
 
-  if (result1 === "W" && result2 === "L") {
+  const result2 =
+    raw2.toUpperCase();
+
+  if (result1 === "W") {
     return 1;
   }
 
-  if (result1 === "L" && result2 === "W") {
+  if (result2 === "W") {
     return 2;
+  }
+
+  if (
+    result1 === "L" &&
+    result2 !== "L"
+  ) {
+    return 2;
+  }
+
+  if (
+    result2 === "L" &&
+    result1 !== "L"
+  ) {
+    return 1;
   }
 
   const number1 = Number(raw1);
@@ -544,7 +564,9 @@ function getWinnerSide(score1, score2) {
     return null;
   }
 
-  return number1 > number2 ? 1 : 2;
+  return number1 > number2
+    ? 1
+    : 2;
 }
 
 function CaptainTeams({
@@ -781,12 +803,14 @@ function TeamRoster({
     <div
       style={{
         textAlign: "center",
-        backgroundColor: isWinner
-          ? "rgba(46, 160, 67, 0.14)"
-          : "transparent",
-        border: isWinner
-          ? "1px solid #3fb950"
-          : "1px solid transparent",
+        backgroundColor:
+          isWinner
+            ? "rgba(46, 160, 67, 0.14)"
+            : "transparent",
+        border:
+          isWinner
+            ? "1px solid #3fb950"
+            : "1px solid transparent",
         borderRadius: "10px",
         padding: "10px",
       }}
@@ -835,9 +859,10 @@ function TeamRoster({
           color: "#8b949e",
           fontSize: "11px",
           fontWeight: "bold",
-          marginBottom: isWinner
-            ? "4px"
-            : "12px",
+          marginBottom:
+            isWinner
+              ? "4px"
+              : "12px",
         }}
       >
         CAPTAIN
@@ -2140,11 +2165,12 @@ function MatchupSection({
 function GameLeaderboard({
   gameData,
 }) {
-  const rankedGameData = [...gameData].sort(
-    (a, b) =>
-      Number(b.points || 0) -
-      Number(a.points || 0)
-  );
+  const rankedGameData =
+    [...gameData].sort(
+      (a, b) =>
+        Number(b.points || 0) -
+        Number(a.points || 0)
+    );
 
   return (
     <>
@@ -2167,14 +2193,17 @@ function GameLeaderboard({
             index
           ) => {
             const playerPoints =
-              Number(player.points || 0);
+              Number(
+                player.points || 0
+              );
 
             const numericRank =
               1 +
               rankedGameData.filter(
                 (otherPlayer) =>
                   Number(
-                    otherPlayer.points || 0
+                    otherPlayer.points ||
+                      0
                   ) > playerPoints
               ).length;
 

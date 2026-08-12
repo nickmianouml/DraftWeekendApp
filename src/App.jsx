@@ -1,4 +1,8 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import {
+  Navigate,
+  Route,
+  Routes,
+} from "react-router-dom";
 
 import Header from "./components/Header";
 import BottomNav from "./components/BottomNav";
@@ -9,6 +13,7 @@ import PlayerSchedule from "./pages/PlayerSchedule";
 import Games from "./pages/Games";
 import GameDetails from "./pages/GameDetails";
 import Stats from "./pages/Stats";
+import Rules from "./pages/Rules";
 
 function App() {
   return (
@@ -25,11 +30,19 @@ function App() {
       <Header />
 
       <Routes>
-        <Route path="/" element={<Standings />} />
+        <Route
+          path="/"
+          element={<Standings />}
+        />
 
         <Route
           path="/standings"
-          element={<Navigate to="/" replace />}
+          element={
+            <Navigate
+              to="/"
+              replace
+            />
+          }
         />
 
         <Route
@@ -42,18 +55,34 @@ function App() {
           element={<PlayerSchedule />}
         />
 
-        <Route path="/games" element={<Games />} />
+        <Route
+          path="/games"
+          element={<Games />}
+        />
 
         <Route
           path="/games/:gameId"
           element={<GameDetails />}
         />
 
-        <Route path="/stats" element={<Stats />} />
+        <Route
+          path="/stats"
+          element={<Stats />}
+        />
+
+        <Route
+          path="/rules"
+          element={<Rules />}
+        />
 
         <Route
           path="*"
-          element={<Navigate to="/" replace />}
+          element={
+            <Navigate
+              to="/"
+              replace
+            />
+          }
         />
       </Routes>
 

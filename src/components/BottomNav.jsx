@@ -12,8 +12,13 @@ function BottomNav() {
           isActive ? "active" : ""
         }
       >
-        <span>🏆</span>
-        <span>Standings</span>
+        <span className="bottom-nav-icon">
+          🏆
+        </span>
+
+        <span className="bottom-nav-label">
+          Standings
+        </span>
       </NavLink>
 
       <NavLink
@@ -22,8 +27,13 @@ function BottomNav() {
           isActive ? "active" : ""
         }
       >
-        <span>🎯</span>
-        <span>Games</span>
+        <span className="bottom-nav-icon">
+          🎯
+        </span>
+
+        <span className="bottom-nav-label">
+          Games
+        </span>
       </NavLink>
 
       <NavLink
@@ -32,8 +42,28 @@ function BottomNav() {
           isActive ? "active" : ""
         }
       >
-        <span>📊</span>
-        <span>All Time</span>
+        <span className="bottom-nav-icon">
+          📊
+        </span>
+
+        <span className="bottom-nav-label">
+          All Time
+        </span>
+      </NavLink>
+
+      <NavLink
+        to="/rules"
+        className={({ isActive }) =>
+          isActive ? "active" : ""
+        }
+      >
+        <span className="bottom-nav-icon">
+          📖
+        </span>
+
+        <span className="bottom-nav-label">
+          Rules
+        </span>
       </NavLink>
     </nav>
   );

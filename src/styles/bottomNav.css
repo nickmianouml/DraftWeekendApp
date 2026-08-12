@@ -4,8 +4,12 @@
   left: 0;
   right: 0;
 
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+
+  width: 100%;
+  height: 70px;
 
   background-color: #161b22;
   border-top: 1px solid #30363d;
@@ -14,12 +18,13 @@
 }
 
 .bottom-nav a {
-  min-height: 64px;
+  flex: 1 1 25%;
+  min-width: 0;
 
   display: flex;
   flex-direction: column;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
 
   gap: 4px;
 
@@ -28,16 +33,53 @@
 
   font-size: 12px;
   font-weight: 600;
+
+  white-space: nowrap;
+
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
 }
 
-.bottom-nav a span:first-child {
-  font-size: 20px;
+.bottom-nav a:hover {
+  color: #ffffff;
 }
 
 .bottom-nav a.active {
   color: #f2cc60;
+  background-color: #21262d;
 }
 
-.bottom-nav a:hover {
-  color: white;
+.bottom-nav-icon {
+  display: block;
+
+  font-size: 20px;
+  line-height: 1;
+}
+
+.bottom-nav-label {
+  display: block;
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  max-width: 100%;
+
+  text-align: center;
+  line-height: 1.1;
+}
+
+@media (max-width: 420px) {
+  .bottom-nav {
+    height: 66px;
+  }
+
+  .bottom-nav a {
+    gap: 3px;
+    font-size: 11px;
+  }
+
+  .bottom-nav-icon {
+    font-size: 18px;
+  }
 }

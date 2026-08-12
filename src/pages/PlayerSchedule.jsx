@@ -43,8 +43,11 @@ function teamIncludesPlayer(team, playerName) {
 }
 
 function formatScore(score1, score2) {
-  const left = String(score1 ?? "").trim();
-  const right = String(score2 ?? "").trim();
+  const left =
+    String(score1 ?? "").trim();
+
+  const right =
+    String(score2 ?? "").trim();
 
   if (!left && !right) {
     return "Score: TBD";
@@ -54,166 +57,282 @@ function formatScore(score1, score2) {
 }
 
 function getWinnerSide(score1, score2) {
-  const left = String(score1 ?? "")
-    .trim()
-    .toUpperCase();
+  const left =
+    String(score1 ?? "")
+      .trim()
+      .toUpperCase();
 
-  const right = String(score2 ?? "")
-    .trim()
-    .toUpperCase();
+  const right =
+    String(score2 ?? "")
+      .trim()
+      .toUpperCase();
 
   if (!left || !right) {
     return null;
   }
 
-  if (left === "W" && right === "L") {
+  /*
+    Explicit W always wins.
+
+    This handles:
+    W / L
+    W / 2 left
+    1 left / W
+  */
+  if (left === "W") {
     return "own";
   }
 
-  if (left === "L" && right === "W") {
+  if (right === "W") {
     return "opponent";
   }
 
-  const leftNumber = Number(left);
-  const rightNumber = Number(right);
+  if (
+    left === "L" &&
+    right !== "L"
+  ) {
+    return "opponent";
+  }
+
+  if (
+    right === "L" &&
+    left !== "L"
+  ) {
+    return "own";
+  }
+
+  /*
+    Normal games still use
+    numeric scores.
+  */
+  const leftNumber =
+    Number(left);
+
+  const rightNumber =
+    Number(right);
 
   if (
     Number.isNaN(leftNumber) ||
-    Number.isNaN(rightNumber)
+    Number.isNaN(rightNumber) ||
+    leftNumber === rightNumber
   ) {
     return null;
   }
 
-  if (leftNumber > rightNumber) {
+  if (
+    leftNumber >
+    rightNumber
+  ) {
     return "own";
   }
 
-  if (rightNumber > leftNumber) {
-    return "opponent";
-  }
-
-  return null;
+  return "opponent";
 }
 
 function PlayerSchedule() {
-  const { playerName } = useParams();
-  const navigate = useNavigate();
+  const { playerName } =
+    useParams();
+
+  const navigate =
+    useNavigate();
 
   const decodedPlayerName =
-    decodeURIComponent(playerName || "");
+    decodeURIComponent(
+      playerName || ""
+    );
 
-  const [schedule, setSchedule] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [
+    schedule,
+    setSchedule,
+  ] = useState([]);
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
+
+  const [
+    error,
+    setError,
+  ] = useState("");
 
   useEffect(() => {
-    async function loadSchedule() {
+    let active = true;
+
+    async function loadSchedule(
+      showLoading = false
+    ) {
       try {
-        setError("");
-        setLoading(true);
+        if (showLoading) {
+          setLoading(true);
+        }
 
-        const results = await Promise.all(
-          games.map(async (game) => {
-            try {
-              if (captainGames.includes(game.name)) {
-                const captainGame =
-                  await getCaptainGame(game.name);
+        const results =
+          await Promise.all(
+            games.map(
+              async (game) => {
+                try {
+                  if (
+                    captainGames.includes(
+                      game.name
+                    )
+                  ) {
+                    const captainGame =
+                      await getCaptainGame(
+                        game.name
+                      );
 
-                return buildCaptainScheduleItem(
-                  game,
-                  captainGame,
-                  decodedPlayerName
-                );
+                    return buildCaptainScheduleItem(
+                      game,
+                      captainGame,
+                      decodedPlayerName
+                    );
+                  }
+
+                  if (
+                    placementGames.includes(
+                      game.name
+                    )
+                  ) {
+                    const placements =
+                      await getPlacementsForGame(
+                        game.name
+                      );
+
+                    return buildPlacementScheduleItem(
+                      game,
+                      placements,
+                      decodedPlayerName
+                    );
+                  }
+
+                  if (
+                    game.name ===
+                    "Elimination Chamber"
+                  ) {
+                    const extras =
+                      await getExtrasForGame(
+                        game.name
+                      );
+
+                    return buildEliminationScheduleItem(
+                      game,
+                      extras,
+                      decodedPlayerName
+                    );
+                  }
+
+                  if (
+                    game.name ===
+                    "Unluckiest"
+                  ) {
+                    return {
+                      game,
+                      type: "special",
+                      hasMatchup: false,
+                      matchups: [
+                        {
+                          label:
+                            "Determined by lowest Points Per Spin.",
+                        },
+                      ],
+                    };
+                  }
+
+                  const matchups =
+                    await getMatchupsForGame(
+                      game.name
+                    );
+
+                  return buildMatchupScheduleItem(
+                    game,
+                    matchups,
+                    decodedPlayerName
+                  );
+                } catch (
+                  gameError
+                ) {
+                  console.error(
+                    `Schedule error for ${game.name}:`,
+                    gameError
+                  );
+
+                  return {
+                    game,
+                    type: "error",
+                    hasMatchup: false,
+                    matchups: [
+                      {
+                        label:
+                          "Unable to load this game right now.",
+                      },
+                    ],
+                  };
+                }
               }
+            )
+          );
 
-              if (placementGames.includes(game.name)) {
-                const placements =
-                  await getPlacementsForGame(game.name);
-
-                return buildPlacementScheduleItem(
-                  game,
-                  placements,
-                  decodedPlayerName
-                );
-              }
-
-              if (game.name === "Elimination Chamber") {
-                const extras =
-                  await getExtrasForGame(game.name);
-
-                return buildEliminationScheduleItem(
-                  game,
-                  extras,
-                  decodedPlayerName
-                );
-              }
-
-              if (game.name === "Unluckiest") {
-                return {
-                  game,
-                  type: "special",
-                  hasMatchup: false,
-                  matchups: [
-                    {
-                      label:
-                        "Determined by lowest Points Per Spin.",
-                    },
-                  ],
-                };
-              }
-
-              const matchups =
-                await getMatchupsForGame(game.name);
-
-              return buildMatchupScheduleItem(
-                game,
-                matchups,
-                decodedPlayerName
-              );
-            } catch (gameError) {
-              console.error(
-                `Schedule error for ${game.name}:`,
-                gameError
-              );
-
-              return {
-                game,
-                type: "error",
-                hasMatchup: false,
-                matchups: [
-                  {
-                    label:
-                      "Unable to load this game right now.",
-                  },
-                ],
-              };
-            }
-          })
-        );
+        if (!active) {
+          return;
+        }
 
         setSchedule(results);
+        setError("");
       } catch (err) {
         console.error(
           "Player schedule error:",
           err
         );
 
-        setError(
-          "Unable to load player schedule."
-        );
+        /*
+          If we already have schedule
+          data, leave it on screen if
+          a background refresh fails.
+        */
+        if (
+          active &&
+          schedule.length === 0
+        ) {
+          setError(
+            "Unable to load player schedule."
+          );
+        }
       } finally {
-        setLoading(false);
+        if (
+          active &&
+          showLoading
+        ) {
+          setLoading(false);
+        }
       }
     }
 
-    loadSchedule();
+    /*
+      Initial load shows loading UI.
+    */
+    loadSchedule(true);
 
-    const interval = setInterval(
-      loadSchedule,
-      30000
-    );
+    /*
+      Background refresh does NOT
+      switch the whole page back
+      into loading mode.
+    */
+    const interval =
+      setInterval(
+        () => {
+          loadSchedule(false);
+        },
+        30000
+      );
 
-    return () => clearInterval(interval);
+    return () => {
+      active = false;
+
+      clearInterval(
+        interval
+      );
+    };
   }, [decodedPlayerName]);
 
   if (loading) {
@@ -221,13 +340,18 @@ function PlayerSchedule() {
       <div>
         <h1
           style={{
-            color: "#ffffff",
+            color:
+              "#ffffff",
           }}
         >
-          📅 {decodedPlayerName}'s Schedule
+          📅{" "}
+          {decodedPlayerName}
+          's Schedule
         </h1>
 
-        <p>Loading schedule...</p>
+        <p>
+          Loading schedule...
+        </p>
       </div>
     );
   }
@@ -243,17 +367,22 @@ function PlayerSchedule() {
               )}`
             )
           }
-          style={backButtonStyle}
+          style={
+            backButtonStyle
+          }
         >
           ← Back
         </button>
 
         <h1
           style={{
-            color: "#ffffff",
+            color:
+              "#ffffff",
           }}
         >
-          📅 {decodedPlayerName}'s Schedule
+          📅{" "}
+          {decodedPlayerName}
+          's Schedule
         </h1>
 
         <p>{error}</p>
@@ -271,7 +400,9 @@ function PlayerSchedule() {
             )}`
           )
         }
-        style={backButtonStyle}
+        style={
+          backButtonStyle
+        }
       >
         ← Back
       </button>
@@ -279,31 +410,49 @@ function PlayerSchedule() {
       <h1
         style={{
           color: "#ffffff",
-          marginBottom: "6px",
+          marginBottom:
+            "6px",
         }}
       >
-        📅 {decodedPlayerName}'s Schedule
+        📅{" "}
+        {decodedPlayerName}
+        's Schedule
       </h1>
 
       <p
         style={{
           color: "#8b949e",
           marginTop: 0,
-          marginBottom: "22px",
+          marginBottom:
+            "22px",
         }}
       >
         All games in weekend order
       </p>
 
-      {schedule.map((item) => (
-        <ScheduleCard
-          key={item.game.id}
-          item={item}
-          onClick={() =>
-            navigate(`/games/${item.game.id}`)
-          }
-        />
-      ))}
+      {schedule.map(
+        (item) => (
+          <ScheduleCard
+            key={
+              item.game.id
+            }
+            item={item}
+            onClick={() =>
+              navigate(
+                `/games/${item.game.id}`,
+                {
+                  state: {
+                    fromPlayer:
+                      `/players/${encodeURIComponent(
+                        decodedPlayerName
+                      )}`,
+                  },
+                }
+              )
+            }
+          />
+        )
+      )}
     </div>
   );
 }
@@ -320,7 +469,8 @@ function buildCaptainScheduleItem(
       hasMatchup: false,
       matchups: [
         {
-          label: "Teams TBD",
+          label:
+            "Teams TBD",
         },
       ],
     };
@@ -328,50 +478,75 @@ function buildCaptainScheduleItem(
 
   const team1 = [
     captainGame.captain1,
-    ...(captainGame.picks1 || []),
+    ...(captainGame.picks1 ||
+      []),
   ].filter(Boolean);
 
   const team2 = [
     captainGame.captain2,
-    ...(captainGame.picks2 || []),
+    ...(captainGame.picks2 ||
+      []),
   ].filter(Boolean);
 
   const normalizedPlayer =
-    normalizeName(playerName);
+    normalizeName(
+      playerName
+    );
 
-  const onTeam1 = team1.some(
-    (name) =>
-      normalizeName(name) === normalizedPlayer
-  );
+  const onTeam1 =
+    team1.some(
+      (name) =>
+        normalizeName(
+          name
+        ) ===
+        normalizedPlayer
+    );
 
-  const onTeam2 = team2.some(
-    (name) =>
-      normalizeName(name) === normalizedPlayer
-  );
+  const onTeam2 =
+    team2.some(
+      (name) =>
+        normalizeName(
+          name
+        ) ===
+        normalizedPlayer
+    );
 
-  if (!onTeam1 && !onTeam2) {
+  if (
+    !onTeam1 &&
+    !onTeam2
+  ) {
     return {
       game,
       type: "captain",
       hasMatchup: false,
       matchups: [
         {
-          label: "Team assignment TBD",
+          label:
+            "Team assignment TBD",
         },
       ],
     };
   }
 
-  const ownTeam = onTeam1 ? team1 : team2;
-  const opponentTeam = onTeam1 ? team2 : team1;
+  const ownTeam =
+    onTeam1
+      ? team1
+      : team2;
 
-  const ownScore = onTeam1
-    ? captainGame.score1
-    : captainGame.score2;
+  const opponentTeam =
+    onTeam1
+      ? team2
+      : team1;
 
-  const opponentScore = onTeam1
-    ? captainGame.score2
-    : captainGame.score1;
+  const ownScore =
+    onTeam1
+      ? captainGame.score1
+      : captainGame.score2;
+
+  const opponentScore =
+    onTeam1
+      ? captainGame.score2
+      : captainGame.score1;
 
   return {
     game,
@@ -379,23 +554,30 @@ function buildCaptainScheduleItem(
     hasMatchup: true,
     matchups: [
       {
-        ownTeam: ownTeam.join(" / "),
+        ownTeam:
+          ownTeam.join(
+            " / "
+          ),
+
         opponentTeam:
-          opponentTeam.length > 0
-            ? opponentTeam.join(" / ")
+          opponentTeam.length >
+          0
+            ? opponentTeam.join(
+                " / "
+              )
             : "TBD",
-        score: formatScore(
-          ownScore,
-          opponentScore
-        ),
-        winner: getWinnerSide(
-          ownScore,
-          opponentScore
-        ),
-        winner: getWinnerSide(
-          ownScore,
-          opponentScore
-        ),
+
+        score:
+          formatScore(
+            ownScore,
+            opponentScore
+          ),
+
+        winner:
+          getWinnerSide(
+            ownScore,
+            opponentScore
+          ),
       },
     ],
   };
@@ -407,7 +589,9 @@ function buildPlacementScheduleItem(
   playerName
 ) {
   const playerPlacement =
-    (placements || []).find(
+    (
+      placements || []
+    ).find(
       (placement) =>
         teamIncludesPlayer(
           placement.team,
@@ -415,14 +599,17 @@ function buildPlacementScheduleItem(
         )
     );
 
-  if (!playerPlacement) {
+  if (
+    !playerPlacement
+  ) {
     return {
       game,
       type: "placement",
       hasMatchup: false,
       matchups: [
         {
-          label: "Entry TBD",
+          label:
+            "Entry TBD",
         },
       ],
     };
@@ -430,7 +617,8 @@ function buildPlacementScheduleItem(
 
   const place =
     String(
-      playerPlacement.place || ""
+      playerPlacement.place ||
+        ""
     ).trim();
 
   return {
@@ -439,7 +627,9 @@ function buildPlacementScheduleItem(
     hasMatchup: true,
     matchups: [
       {
-        label: playerPlacement.team,
+        label:
+          playerPlacement.team,
+
         result: place
           ? `Placement: ${place}`
           : "Placement: TBD",
@@ -454,20 +644,30 @@ function buildEliminationScheduleItem(
   playerName
 ) {
   const playerRows =
-    (extras || []).filter(
+    (
+      extras || []
+    ).filter(
       (item) =>
-        normalizeName(item.team1) ===
-        normalizeName(playerName)
+        normalizeName(
+          item.team1
+        ) ===
+        normalizeName(
+          playerName
+        )
     );
 
-  if (playerRows.length === 0) {
+  if (
+    playerRows.length ===
+    0
+  ) {
     return {
       game,
       type: "elimination",
       hasMatchup: false,
       matchups: [
         {
-          label: "Group assignment TBD",
+          label:
+            "Group assignment TBD",
         },
       ],
     };
@@ -477,17 +677,27 @@ function buildEliminationScheduleItem(
     game,
     type: "elimination",
     hasMatchup: true,
-    matchups: playerRows.map((item) => {
-      const finish =
-        String(item.team2 || "").trim();
 
-      return {
-        label: item.type,
-        result: finish
-          ? `Finish: ${finish}`
-          : "Finish: TBD",
-      };
-    }),
+    matchups:
+      playerRows.map(
+        (item) => {
+          const finish =
+            String(
+              item.team2 ||
+                ""
+            ).trim();
+
+          return {
+            label:
+              item.type,
+
+            result:
+              finish
+                ? `Finish: ${finish}`
+                : "Finish: TBD",
+          };
+        }
+      ),
   };
 }
 
@@ -497,7 +707,9 @@ function buildMatchupScheduleItem(
   playerName
 ) {
   const playerMatchups =
-    (matchups || []).filter(
+    (
+      matchups || []
+    ).filter(
       (matchup) =>
         teamIncludesPlayer(
           matchup.team1,
@@ -509,14 +721,18 @@ function buildMatchupScheduleItem(
         )
     );
 
-  if (playerMatchups.length === 0) {
+  if (
+    playerMatchups.length ===
+    0
+  ) {
     return {
       game,
       type: "matchup",
       hasMatchup: false,
       matchups: [
         {
-          label: "Matchup TBD",
+          label:
+            "Matchup TBD",
         },
       ],
     };
@@ -526,43 +742,59 @@ function buildMatchupScheduleItem(
     game,
     type: "matchup",
     hasMatchup: true,
-    matchups: playerMatchups.map((matchup) => {
-      const onTeam1 =
-        teamIncludesPlayer(
-          matchup.team1,
-          playerName
-        );
 
-      const ownTeam = onTeam1
-        ? matchup.team1
-        : matchup.team2;
+    matchups:
+      playerMatchups.map(
+        (matchup) => {
+          const onTeam1 =
+            teamIncludesPlayer(
+              matchup.team1,
+              playerName
+            );
 
-      const opponentTeam = onTeam1
-        ? matchup.team2
-        : matchup.team1;
+          const ownTeam =
+            onTeam1
+              ? matchup.team1
+              : matchup.team2;
 
-      const ownScore = onTeam1
-        ? matchup.score1
-        : matchup.score2;
+          const opponentTeam =
+            onTeam1
+              ? matchup.team2
+              : matchup.team1;
 
-      const opponentScore = onTeam1
-        ? matchup.score2
-        : matchup.score1;
+          const ownScore =
+            onTeam1
+              ? matchup.score1
+              : matchup.score2;
 
-      return {
-        ownTeam: ownTeam || "TBD",
-        opponentTeam:
-          opponentTeam || "TBD",
-        score: formatScore(
-          ownScore,
-          opponentScore
-        ),
-        winner: getWinnerSide(
-          ownScore,
-          opponentScore
-        ),
-      };
-    }),
+          const opponentScore =
+            onTeam1
+              ? matchup.score2
+              : matchup.score1;
+
+          return {
+            ownTeam:
+              ownTeam ||
+              "TBD",
+
+            opponentTeam:
+              opponentTeam ||
+              "TBD",
+
+            score:
+              formatScore(
+                ownScore,
+                opponentScore
+              ),
+
+            winner:
+              getWinnerSide(
+                ownScore,
+                opponentScore
+              ),
+          };
+        }
+      ),
   };
 }
 
@@ -574,37 +806,66 @@ function ScheduleCard({
     <div
       onClick={onClick}
       style={{
-        backgroundColor: "#161b22",
-        border: "1px solid #30363d",
-        borderRadius: "14px",
-        padding: "16px",
-        marginBottom: "14px",
-        cursor: "pointer",
+        backgroundColor:
+          "#161b22",
+
+        border:
+          "1px solid #30363d",
+
+        borderRadius:
+          "14px",
+
+        padding:
+          "16px",
+
+        marginBottom:
+          "14px",
+
+        cursor:
+          "pointer",
       }}
     >
       <div
         style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: "12px",
-          marginBottom: "14px",
+          display:
+            "flex",
+
+          justifyContent:
+            "space-between",
+
+          alignItems:
+            "center",
+
+          gap:
+            "12px",
+
+          marginBottom:
+            "14px",
         }}
       >
         <strong
           style={{
-            color: "#ffffff",
-            fontSize: "17px",
+            color:
+              "#ffffff",
+
+            fontSize:
+              "17px",
           }}
         >
-          {item.game.icon} {item.game.name}
+          {item.game.icon}{" "}
+          {item.game.name}
         </strong>
 
         <span
           style={{
-            color: "#8b949e",
-            fontSize: "22px",
-            lineHeight: 1,
+            color:
+              "#8b949e",
+
+            fontSize:
+              "22px",
+
+            lineHeight:
+              1,
           }}
         >
           ›
@@ -613,16 +874,26 @@ function ScheduleCard({
 
       <div
         style={{
-          display: "grid",
-          gap: "10px",
+          display:
+            "grid",
+
+          gap:
+            "10px",
         }}
       >
         {item.matchups.map(
-          (matchup, index) => (
+          (
+            matchup,
+            index
+          ) => (
             <MatchupDisplay
               key={`${item.game.id}-${index}`}
-              matchup={matchup}
-              muted={!item.hasMatchup}
+              matchup={
+                matchup
+              }
+              muted={
+                !item.hasMatchup
+              }
             />
           )
         )}
@@ -635,15 +906,26 @@ function MatchupDisplay({
   matchup,
   muted,
 }) {
-  if (!matchup.ownTeam) {
+  if (
+    !matchup.ownTeam
+  ) {
     return (
       <div
         style={{
-          backgroundColor: "#21262d",
-          border: "1px solid #30363d",
-          borderRadius: "10px",
-          padding: "12px",
-          textAlign: "center",
+          backgroundColor:
+            "#21262d",
+
+          border:
+            "1px solid #30363d",
+
+          borderRadius:
+            "10px",
+
+          padding:
+            "12px",
+
+          textAlign:
+            "center",
         }}
       >
         <div
@@ -651,10 +933,14 @@ function MatchupDisplay({
             color: muted
               ? "#8b949e"
               : "#ffffff",
-            fontSize: "14px",
-            fontWeight: muted
-              ? "normal"
-              : "bold",
+
+            fontSize:
+              "14px",
+
+            fontWeight:
+              muted
+                ? "normal"
+                : "bold",
           }}
         >
           {matchup.label}
@@ -663,10 +949,17 @@ function MatchupDisplay({
         {matchup.result && (
           <div
             style={{
-              color: "#f2cc60",
-              marginTop: "6px",
-              fontSize: "13px",
-              fontWeight: "bold",
+              color:
+                "#f2cc60",
+
+              marginTop:
+                "6px",
+
+              fontSize:
+                "13px",
+
+              fontWeight:
+                "bold",
             }}
           >
             {matchup.result}
@@ -677,37 +970,63 @@ function MatchupDisplay({
   }
 
   const ownWon =
-    matchup.winner === "own";
+    matchup.winner ===
+    "own";
 
   const opponentWon =
-    matchup.winner === "opponent";
+    matchup.winner ===
+    "opponent";
 
   return (
     <div
       style={{
-        backgroundColor: "#21262d",
-        border: "1px solid #30363d",
-        borderRadius: "10px",
-        padding: "12px 14px",
+        backgroundColor:
+          "#21262d",
+
+        border:
+          "1px solid #30363d",
+
+        borderRadius:
+          "10px",
+
+        padding:
+          "12px 14px",
       }}
     >
       <div
         style={{
-          backgroundColor: ownWon
-            ? "rgba(63, 185, 80, 0.12)"
-            : "transparent",
-          border: ownWon
-            ? "1px solid #3fb950"
-            : "1px solid transparent",
-          borderRadius: "9px",
-          padding: "9px 10px",
-          textAlign: "center",
-          color: ownWon
-            ? "#3fb950"
-            : "#ffffff",
-          fontSize: "14px",
-          fontWeight: "bold",
-          lineHeight: 1.45,
+          backgroundColor:
+            ownWon
+              ? "rgba(63, 185, 80, 0.12)"
+              : "transparent",
+
+          border:
+            ownWon
+              ? "1px solid #3fb950"
+              : "1px solid transparent",
+
+          borderRadius:
+            "9px",
+
+          padding:
+            "9px 10px",
+
+          textAlign:
+            "center",
+
+          color:
+            ownWon
+              ? "#3fb950"
+              : "#ffffff",
+
+          fontSize:
+            "14px",
+
+          fontWeight:
+            "bold",
+
+          lineHeight:
+            1.45,
         }}
       >
         {matchup.ownTeam}
@@ -715,9 +1034,14 @@ function MatchupDisplay({
         {ownWon && (
           <div
             style={{
-              marginTop: "4px",
-              fontSize: "10px",
-              letterSpacing: "0.5px",
+              marginTop:
+                "4px",
+
+              fontSize:
+                "10px",
+
+              letterSpacing:
+                "0.5px",
             }}
           >
             WINNER
@@ -727,11 +1051,20 @@ function MatchupDisplay({
 
       <div
         style={{
-          textAlign: "center",
-          color: "#8b949e",
-          fontSize: "11px",
-          fontWeight: "bold",
-          margin: "8px 0",
+          textAlign:
+            "center",
+
+          color:
+            "#8b949e",
+
+          fontSize:
+            "11px",
+
+          fontWeight:
+            "bold",
+
+          margin:
+            "8px 0",
         }}
       >
         VS
@@ -739,21 +1072,38 @@ function MatchupDisplay({
 
       <div
         style={{
-          backgroundColor: opponentWon
-            ? "rgba(63, 185, 80, 0.12)"
-            : "transparent",
-          border: opponentWon
-            ? "1px solid #3fb950"
-            : "1px solid transparent",
-          borderRadius: "9px",
-          padding: "9px 10px",
-          textAlign: "center",
-          color: opponentWon
-            ? "#3fb950"
-            : "#ffffff",
-          fontSize: "14px",
-          fontWeight: "bold",
-          lineHeight: 1.45,
+          backgroundColor:
+            opponentWon
+              ? "rgba(63, 185, 80, 0.12)"
+              : "transparent",
+
+          border:
+            opponentWon
+              ? "1px solid #3fb950"
+              : "1px solid transparent",
+
+          borderRadius:
+            "9px",
+
+          padding:
+            "9px 10px",
+
+          textAlign:
+            "center",
+
+          color:
+            opponentWon
+              ? "#3fb950"
+              : "#ffffff",
+
+          fontSize:
+            "14px",
+
+          fontWeight:
+            "bold",
+
+          lineHeight:
+            1.45,
         }}
       >
         {matchup.opponentTeam}
@@ -761,9 +1111,14 @@ function MatchupDisplay({
         {opponentWon && (
           <div
             style={{
-              marginTop: "4px",
-              fontSize: "10px",
-              letterSpacing: "0.5px",
+              marginTop:
+                "4px",
+
+              fontSize:
+                "10px",
+
+              letterSpacing:
+                "0.5px",
             }}
           >
             WINNER
@@ -773,15 +1128,29 @@ function MatchupDisplay({
 
       <div
         style={{
-          marginTop: "10px",
-          paddingTop: "9px",
-          borderTop: "1px solid #30363d",
-          textAlign: "center",
-          color: matchup.score === "Score: TBD"
-            ? "#8b949e"
-            : "#f2cc60",
-          fontSize: "13px",
-          fontWeight: "bold",
+          marginTop:
+            "10px",
+
+          paddingTop:
+            "9px",
+
+          borderTop:
+            "1px solid #30363d",
+
+          textAlign:
+            "center",
+
+          color:
+            matchup.score ===
+            "Score: TBD"
+              ? "#8b949e"
+              : "#f2cc60",
+
+          fontSize:
+            "13px",
+
+          fontWeight:
+            "bold",
         }}
       >
         {matchup.score}
@@ -791,11 +1160,20 @@ function MatchupDisplay({
 }
 
 const backButtonStyle = {
-  marginBottom: "20px",
-  padding: "10px 14px",
-  borderRadius: "8px",
-  border: "none",
-  cursor: "pointer",
+  marginBottom:
+    "20px",
+
+  padding:
+    "10px 14px",
+
+  borderRadius:
+    "8px",
+
+  border:
+    "none",
+
+  cursor:
+    "pointer",
 };
 
 export default PlayerSchedule;
