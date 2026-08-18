@@ -40,7 +40,7 @@ const gameRules = [
     payouts:
       "0 Wins: .5 spin, 1 Win: 1 spin, 2 Win: 2 spins, Shutout: .5 spin",
     rules:
-      "Game to 15 win by 2, not exact, total points cancel",
+      "Game to 15 win by 2, not exact, total points cancel. Top rung: 1pt, middle: 2pts, bottom: 3pts. One on each rung in a turn is 7pts.",
   },
   {
     name: "Kan Jam",

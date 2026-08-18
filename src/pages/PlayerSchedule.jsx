@@ -3,10 +3,14 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import games from "../data/games";
 
-import { getMatchupsForGame } from "../services/currentGame";
-import { getPlacementsForGame } from "../services/placements";
-import { getCaptainGame } from "../services/captains";
-import { getExtrasForGame } from "../services/gameExtras";
+import { getCurrentGameMatchups } from "../services/currentGame";
+import { getPlacements } from "../services/placements";
+import { getCaptainGames } from "../services/captains";
+import { getGameExtras } from "../services/gameExtras";
+import {
+  formatAmericanOdds,
+  getOdds,
+} from "../services/odds";
 
 const placementGames = [
   "Fuck Yeah",
@@ -26,6 +30,21 @@ function normalizeName(value) {
     .trim()
     .toLowerCase()
     .replace(/\s+/g, " ");
+}
+
+function normalizeGameName(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeTeam(value) {
+  return String(value || "")
+    .split(/\s*\/\s*|\s*,\s*|\s*&\s*/)
+    .map(normalizeName)
+    .filter(Boolean)
+    .sort()
+    .join("|");
 }
 
 function teamIncludesPlayer(team, playerName) {
@@ -71,14 +90,6 @@ function getWinnerSide(score1, score2) {
     return null;
   }
 
-  /*
-    Explicit W always wins.
-
-    This handles:
-    W / L
-    W / 2 left
-    1 left / W
-  */
   if (left === "W") {
     return "own";
   }
@@ -101,10 +112,6 @@ function getWinnerSide(score1, score2) {
     return "own";
   }
 
-  /*
-    Normal games still use
-    numeric scores.
-  */
   const leftNumber =
     Number(left);
 
@@ -119,14 +126,251 @@ function getWinnerSide(score1, score2) {
     return null;
   }
 
-  if (
-    leftNumber >
+  return leftNumber >
     rightNumber
-  ) {
-    return "own";
+    ? "own"
+    : "opponent";
+}
+
+function findMatchupOdds(
+  odds,
+  gameName,
+  team1,
+  team2
+) {
+  const targetGame =
+    normalizeGameName(
+      gameName
+    );
+
+  const source =
+    (odds || []).filter(
+      (item) =>
+        item.type ===
+          "Matchup" &&
+        normalizeGameName(
+          item.game
+        ) ===
+          targetGame
+    );
+
+  const firstTeam =
+    normalizeTeam(
+      team1
+    );
+
+  const secondTeam =
+    normalizeTeam(
+      team2
+    );
+
+  const direct =
+    source.find(
+      (item) =>
+        normalizeTeam(
+          item.team1
+        ) === firstTeam &&
+        normalizeTeam(
+          item.team2
+        ) === secondTeam
+    );
+
+  if (direct) {
+    return {
+      odds1:
+        direct.odds1,
+
+      odds2:
+        direct.odds2,
+    };
   }
 
-  return "opponent";
+  const reversed =
+    source.find(
+      (item) =>
+        normalizeTeam(
+          item.team1
+        ) === secondTeam &&
+        normalizeTeam(
+          item.team2
+        ) === firstTeam
+    );
+
+  if (reversed) {
+    return {
+      odds1:
+        reversed.odds2,
+
+      odds2:
+        reversed.odds1,
+    };
+  }
+
+  return {
+    odds1: "",
+    odds2: "",
+  };
+}
+
+function findCaptainOdds(
+  odds,
+  gameName,
+  captain1,
+  captain2
+) {
+  const targetGame =
+    normalizeGameName(
+      gameName
+    );
+
+  const rows =
+    (odds || []).filter(
+      (item) =>
+        item.type ===
+          "Matchup" &&
+        normalizeGameName(
+          item.game
+        ) ===
+          targetGame
+    );
+
+  const direct =
+    rows.find(
+      (item) =>
+        normalizeName(
+          item.team1
+        ) ===
+          normalizeName(
+            captain1
+          ) &&
+        normalizeName(
+          item.team2
+        ) ===
+          normalizeName(
+            captain2
+          )
+    );
+
+  if (direct) {
+    return {
+      odds1:
+        direct.odds1,
+
+      odds2:
+        direct.odds2,
+    };
+  }
+
+  const reversed =
+    rows.find(
+      (item) =>
+        normalizeName(
+          item.team1
+        ) ===
+          normalizeName(
+            captain2
+          ) &&
+        normalizeName(
+          item.team2
+        ) ===
+          normalizeName(
+            captain1
+          )
+    );
+
+  if (reversed) {
+    return {
+      odds1:
+        reversed.odds2,
+
+      odds2:
+        reversed.odds1,
+    };
+  }
+
+  return {
+    odds1: "",
+    odds2: "",
+  };
+}
+
+function findOutrightOdds(
+  odds,
+  gameName,
+  participant
+) {
+  const targetGame =
+    normalizeGameName(
+      gameName
+    );
+
+  const rows =
+    (odds || []).filter(
+      (item) =>
+        normalizeGameName(
+          item.game
+        ) ===
+          targetGame
+    );
+
+  const teamKey =
+    normalizeTeam(
+      participant
+    );
+
+  const teamRow =
+    rows.find(
+      (item) => {
+        if (
+          item.type !==
+          "Team Outright"
+        ) {
+          return false;
+        }
+
+        const sourceTeam =
+          normalizeTeam(
+            [
+              item.player1,
+              item.player2,
+            ]
+              .filter(Boolean)
+              .join(" / ")
+          );
+
+        return (
+          sourceTeam ===
+          teamKey
+        );
+      }
+    );
+
+  if (teamRow) {
+    return (
+      teamRow.outrightOdds
+    );
+  }
+
+  const name =
+    normalizeName(
+      participant
+    );
+
+  const playerRow =
+    rows.find(
+      (item) =>
+        item.type ===
+          "Individual Outright" &&
+        normalizeName(
+          item.player1
+        ) === name
+    );
+
+  return (
+    playerRow
+      ?.outrightOdds ||
+    ""
+  );
 }
 
 function PlayerSchedule() {
@@ -167,117 +411,270 @@ function PlayerSchedule() {
           setLoading(true);
         }
 
+        const [
+          matchupResult,
+          captainResult,
+          placementResult,
+          extrasResult,
+          oddsResult,
+        ] =
+          await Promise.allSettled([
+            getCurrentGameMatchups(),
+            getCaptainGames(),
+            getPlacements(),
+            getGameExtras(),
+            getOdds(),
+          ]);
+
+        if (!active) {
+          return;
+        }
+
+        const allMatchups =
+          matchupResult.status ===
+          "fulfilled"
+            ? matchupResult.value
+            : [];
+
+        const allCaptainGames =
+          captainResult.status ===
+          "fulfilled"
+            ? captainResult.value
+            : [];
+
+        const allPlacements =
+          placementResult.status ===
+          "fulfilled"
+            ? placementResult.value
+            : [];
+
+        const allExtras =
+          extrasResult.status ===
+          "fulfilled"
+            ? extrasResult.value
+            : [];
+
+        const allOdds =
+          oddsResult.status ===
+          "fulfilled"
+            ? oddsResult.value
+            : [];
+
+        if (
+          matchupResult.status ===
+          "rejected"
+        ) {
+          console.error(
+            "Schedule matchup data error:",
+            matchupResult.reason
+          );
+        }
+
+        if (
+          captainResult.status ===
+          "rejected"
+        ) {
+          console.error(
+            "Schedule captain data error:",
+            captainResult.reason
+          );
+        }
+
+        if (
+          placementResult.status ===
+          "rejected"
+        ) {
+          console.error(
+            "Schedule placement data error:",
+            placementResult.reason
+          );
+        }
+
+        if (
+          extrasResult.status ===
+          "rejected"
+        ) {
+          console.error(
+            "Schedule extras data error:",
+            extrasResult.reason
+          );
+        }
+
+        if (
+          oddsResult.status ===
+          "rejected"
+        ) {
+          console.error(
+            "Schedule odds data error:",
+            oddsResult.reason
+          );
+        }
+
+        const primaryRequestsFailed =
+          matchupResult.status ===
+            "rejected" &&
+          captainResult.status ===
+            "rejected" &&
+          placementResult.status ===
+            "rejected" &&
+          extrasResult.status ===
+            "rejected";
+
+        if (
+          primaryRequestsFailed
+        ) {
+          throw new Error(
+            "All schedule data sources failed."
+          );
+        }
+
         const results =
-          await Promise.all(
-            games.map(
-              async (game) => {
-                try {
-                  if (
-                    captainGames.includes(
-                      game.name
-                    )
-                  ) {
-                    const captainGame =
-                      await getCaptainGame(
-                        game.name
-                      );
-
-                    return buildCaptainScheduleItem(
-                      game,
-                      captainGame,
-                      decodedPlayerName
-                    );
-                  }
-
-                  if (
-                    placementGames.includes(
-                      game.name
-                    )
-                  ) {
-                    const placements =
-                      await getPlacementsForGame(
-                        game.name
-                      );
-
-                    return buildPlacementScheduleItem(
-                      game,
-                      placements,
-                      decodedPlayerName
-                    );
-                  }
-
-                  if (
-                    game.name ===
-                    "Elimination Chamber"
-                  ) {
-                    const extras =
-                      await getExtrasForGame(
-                        game.name
-                      );
-
-                    return buildEliminationScheduleItem(
-                      game,
-                      extras,
-                      decodedPlayerName
-                    );
-                  }
-
-                  if (
-                    game.name ===
-                    "Unluckiest"
-                  ) {
-                    return {
-                      game,
-                      type: "special",
-                      hasMatchup: false,
-                      matchups: [
-                        {
-                          label:
-                            "Determined by lowest Points Per Spin.",
-                        },
-                      ],
-                    };
-                  }
-
-                  const matchups =
-                    await getMatchupsForGame(
-                      game.name
-                    );
-
-                  return buildMatchupScheduleItem(
-                    game,
-                    matchups,
-                    decodedPlayerName
+          games.map(
+            (game) => {
+              try {
+                const gameName =
+                  normalizeGameName(
+                    game.name
                   );
-                } catch (
-                  gameError
+
+                if (
+                  captainGames.includes(
+                    game.name
+                  )
                 ) {
-                  console.error(
-                    `Schedule error for ${game.name}:`,
-                    gameError
-                  );
+                  const captainGame =
+                    allCaptainGames.find(
+                      (item) =>
+                        normalizeGameName(
+                          item.game
+                        ) ===
+                        gameName
+                    ) ||
+                    null;
 
+                  return buildCaptainScheduleItem(
+                    game,
+                    captainGame,
+                    decodedPlayerName,
+                    allOdds
+                  );
+                }
+
+                if (
+                  placementGames.includes(
+                    game.name
+                  )
+                ) {
+                  const placements =
+                    allPlacements.filter(
+                      (item) =>
+                        normalizeGameName(
+                          item.game
+                        ) ===
+                        gameName
+                    );
+
+                  return buildPlacementScheduleItem(
+                    game,
+                    placements,
+                    decodedPlayerName,
+                    allOdds
+                  );
+                }
+
+                if (
+                  game.name ===
+                  "Elimination Chamber"
+                ) {
+                  const extras =
+                    allExtras.filter(
+                      (item) =>
+                        normalizeGameName(
+                          item.game
+                        ) ===
+                        gameName
+                    );
+
+                  return buildEliminationScheduleItem(
+                    game,
+                    extras,
+                    decodedPlayerName,
+                    allOdds
+                  );
+                }
+
+                if (
+                  game.name ===
+                  "Unluckiest"
+                ) {
                   return {
                     game,
-                    type: "error",
-                    hasMatchup: false,
+                    type:
+                      "special",
+
+                    hasMatchup:
+                      false,
+
                     matchups: [
                       {
                         label:
-                          "Unable to load this game right now.",
+                          "Determined by lowest Points Per Spin.",
                       },
                     ],
                   };
                 }
+
+                const matchups =
+                  allMatchups.filter(
+                    (item) =>
+                      normalizeGameName(
+                        item.game
+                      ) ===
+                      gameName
+                  );
+
+                return buildMatchupScheduleItem(
+                  game,
+                  matchups,
+                  decodedPlayerName,
+                  allOdds
+                );
+              } catch (
+                gameError
+              ) {
+                console.error(
+                  `Schedule error for ${game.name}:`,
+                  gameError
+                );
+
+                return {
+                  game,
+
+                  type:
+                    "error",
+
+                  hasMatchup:
+                    false,
+
+                  matchups: [
+                    {
+                      label:
+                        "Unable to load this game right now.",
+                    },
+                  ],
+                };
               }
-            )
+            }
           );
 
         if (!active) {
           return;
         }
 
-        setSchedule(results);
+        setSchedule(
+          results
+        );
+
         setError("");
       } catch (err) {
         console.error(
@@ -285,14 +682,10 @@ function PlayerSchedule() {
           err
         );
 
-        /*
-          If we already have schedule
-          data, leave it on screen if
-          a background refresh fails.
-        */
         if (
           active &&
-          schedule.length === 0
+          schedule.length ===
+            0
         ) {
           setError(
             "Unable to load player schedule."
@@ -308,20 +701,14 @@ function PlayerSchedule() {
       }
     }
 
-    /*
-      Initial load shows loading UI.
-    */
     loadSchedule(true);
 
-    /*
-      Background refresh does NOT
-      switch the whole page back
-      into loading mode.
-    */
     const interval =
       setInterval(
         () => {
-          loadSchedule(false);
+          loadSchedule(
+            false
+          );
         },
         30000
       );
@@ -333,7 +720,9 @@ function PlayerSchedule() {
         interval
       );
     };
-  }, [decodedPlayerName]);
+  }, [
+    decodedPlayerName,
+  ]);
 
   if (loading) {
     return (
@@ -345,12 +734,15 @@ function PlayerSchedule() {
           }}
         >
           📅{" "}
-          {decodedPlayerName}
+          {
+            decodedPlayerName
+          }
           's Schedule
         </h1>
 
         <p>
-          Loading schedule...
+          Loading
+          schedule...
         </p>
       </div>
     );
@@ -381,11 +773,15 @@ function PlayerSchedule() {
           }}
         >
           📅{" "}
-          {decodedPlayerName}
+          {
+            decodedPlayerName
+          }
           's Schedule
         </h1>
 
-        <p>{error}</p>
+        <p>
+          {error}
+        </p>
       </div>
     );
   }
@@ -409,25 +805,33 @@ function PlayerSchedule() {
 
       <h1
         style={{
-          color: "#ffffff",
+          color:
+            "#ffffff",
+
           marginBottom:
             "6px",
         }}
       >
         📅{" "}
-        {decodedPlayerName}
+        {
+          decodedPlayerName
+        }
         's Schedule
       </h1>
 
       <p
         style={{
-          color: "#8b949e",
+          color:
+            "#8b949e",
+
           marginTop: 0,
+
           marginBottom:
             "22px",
         }}
       >
-        All games in weekend order
+        All games in
+        weekend order
       </p>
 
       {schedule.map(
@@ -460,13 +864,21 @@ function PlayerSchedule() {
 function buildCaptainScheduleItem(
   game,
   captainGame,
-  playerName
+  playerName,
+  odds
 ) {
-  if (!captainGame) {
+  if (
+    !captainGame
+  ) {
     return {
       game,
-      type: "captain",
-      hasMatchup: false,
+
+      type:
+        "captain",
+
+      hasMatchup:
+        false,
+
       matchups: [
         {
           label:
@@ -478,12 +890,14 @@ function buildCaptainScheduleItem(
 
   const team1 = [
     captainGame.captain1,
+
     ...(captainGame.picks1 ||
       []),
   ].filter(Boolean);
 
   const team2 = [
     captainGame.captain2,
+
     ...(captainGame.picks2 ||
       []),
   ].filter(Boolean);
@@ -517,8 +931,13 @@ function buildCaptainScheduleItem(
   ) {
     return {
       game,
-      type: "captain",
-      hasMatchup: false,
+
+      type:
+        "captain",
+
+      hasMatchup:
+        false,
+
       matchups: [
         {
           label:
@@ -548,10 +967,33 @@ function buildCaptainScheduleItem(
       ? captainGame.score2
       : captainGame.score1;
 
+  const captainOdds =
+    findCaptainOdds(
+      odds,
+      game.name,
+      captainGame.captain1,
+      captainGame.captain2
+    );
+
+  const ownOdds =
+    onTeam1
+      ? captainOdds.odds1
+      : captainOdds.odds2;
+
+  const opponentOdds =
+    onTeam1
+      ? captainOdds.odds2
+      : captainOdds.odds1;
+
   return {
     game,
-    type: "captain",
-    hasMatchup: true,
+
+    type:
+      "captain",
+
+    hasMatchup:
+      true,
+
     matchups: [
       {
         ownTeam:
@@ -566,6 +1008,10 @@ function buildCaptainScheduleItem(
                 " / "
               )
             : "TBD",
+
+        ownOdds,
+
+        opponentOdds,
 
         score:
           formatScore(
@@ -586,7 +1032,8 @@ function buildCaptainScheduleItem(
 function buildPlacementScheduleItem(
   game,
   placements,
-  playerName
+  playerName,
+  odds
 ) {
   const playerPlacement =
     (
@@ -604,8 +1051,13 @@ function buildPlacementScheduleItem(
   ) {
     return {
       game,
-      type: "placement",
-      hasMatchup: false,
+
+      type:
+        "placement",
+
+      hasMatchup:
+        false,
+
       matchups: [
         {
           label:
@@ -621,14 +1073,32 @@ function buildPlacementScheduleItem(
         ""
     ).trim();
 
+  const outrightOdds =
+    findOutrightOdds(
+      odds,
+      game.name,
+      playerPlacement.team
+    );
+
   return {
     game,
-    type: "placement",
-    hasMatchup: true,
+
+    type:
+      "placement",
+
+    hasMatchup:
+      true,
+
     matchups: [
       {
         label:
           playerPlacement.team,
+
+        odds:
+          outrightOdds,
+
+        oddsLabel:
+          "TO FINISH 1ST",
 
         result: place
           ? `Placement: ${place}`
@@ -641,7 +1111,8 @@ function buildPlacementScheduleItem(
 function buildEliminationScheduleItem(
   game,
   extras,
-  playerName
+  playerName,
+  odds
 ) {
   const playerRows =
     (
@@ -662,8 +1133,13 @@ function buildEliminationScheduleItem(
   ) {
     return {
       game,
-      type: "elimination",
-      hasMatchup: false,
+
+      type:
+        "elimination",
+
+      hasMatchup:
+        false,
+
       matchups: [
         {
           label:
@@ -673,10 +1149,21 @@ function buildEliminationScheduleItem(
     };
   }
 
+  const outrightOdds =
+    findOutrightOdds(
+      odds,
+      game.name,
+      playerName
+    );
+
   return {
     game,
-    type: "elimination",
-    hasMatchup: true,
+
+    type:
+      "elimination",
+
+    hasMatchup:
+      true,
 
     matchups:
       playerRows.map(
@@ -691,6 +1178,12 @@ function buildEliminationScheduleItem(
             label:
               item.type,
 
+            odds:
+              outrightOdds,
+
+            oddsLabel:
+              "TO FINISH 1ST",
+
             result:
               finish
                 ? `Finish: ${finish}`
@@ -704,7 +1197,8 @@ function buildEliminationScheduleItem(
 function buildMatchupScheduleItem(
   game,
   matchups,
-  playerName
+  playerName,
+  odds
 ) {
   const playerMatchups =
     (
@@ -727,8 +1221,13 @@ function buildMatchupScheduleItem(
   ) {
     return {
       game,
-      type: "matchup",
-      hasMatchup: false,
+
+      type:
+        "matchup",
+
+      hasMatchup:
+        false,
+
       matchups: [
         {
           label:
@@ -740,8 +1239,12 @@ function buildMatchupScheduleItem(
 
   return {
     game,
-    type: "matchup",
-    hasMatchup: true,
+
+    type:
+      "matchup",
+
+    hasMatchup:
+      true,
 
     matchups:
       playerMatchups.map(
@@ -772,6 +1275,24 @@ function buildMatchupScheduleItem(
               ? matchup.score2
               : matchup.score1;
 
+          const matchupOdds =
+            findMatchupOdds(
+              odds,
+              game.name,
+              matchup.team1,
+              matchup.team2
+            );
+
+          const ownOdds =
+            onTeam1
+              ? matchupOdds.odds1
+              : matchupOdds.odds2;
+
+          const opponentOdds =
+            onTeam1
+              ? matchupOdds.odds2
+              : matchupOdds.odds1;
+
           return {
             ownTeam:
               ownTeam ||
@@ -780,6 +1301,10 @@ function buildMatchupScheduleItem(
             opponentTeam:
               opponentTeam ||
               "TBD",
+
+            ownOdds,
+
+            opponentOdds,
 
             score:
               formatScore(
@@ -804,7 +1329,9 @@ function ScheduleCard({
 }) {
   return (
     <div
-      onClick={onClick}
+      onClick={
+        onClick
+      }
       style={{
         backgroundColor:
           "#161b22",
@@ -836,8 +1363,7 @@ function ScheduleCard({
           alignItems:
             "center",
 
-          gap:
-            "12px",
+          gap: "12px",
 
           marginBottom:
             "14px",
@@ -852,8 +1378,12 @@ function ScheduleCard({
               "17px",
           }}
         >
-          {item.game.icon}{" "}
-          {item.game.name}
+          {
+            item.game.icon
+          }{" "}
+          {
+            item.game.name
+          }
         </strong>
 
         <span
@@ -877,8 +1407,7 @@ function ScheduleCard({
           display:
             "grid",
 
-          gap:
-            "10px",
+          gap: "10px",
         }}
       >
         {item.matchups.map(
@@ -898,6 +1427,63 @@ function ScheduleCard({
           )
         )}
       </div>
+    </div>
+  );
+}
+
+function SmallOdds({
+  value,
+  label = "ODDS",
+}) {
+  if (
+    value === "" ||
+    value === null ||
+    value === undefined
+  ) {
+    return null;
+  }
+
+  return (
+    <div
+      style={{
+        marginTop:
+          "5px",
+      }}
+    >
+      <span
+        style={{
+          display:
+            "block",
+
+          color:
+            "#8b949e",
+
+          fontSize:
+            "9px",
+
+          letterSpacing:
+            "0.5px",
+
+          fontWeight:
+            "bold",
+        }}
+      >
+        {label}
+      </span>
+
+      <strong
+        style={{
+          color:
+            "#58a6ff",
+
+          fontSize:
+            "14px",
+        }}
+      >
+        {formatAmericanOdds(
+          value
+        )}
+      </strong>
     </div>
   );
 }
@@ -930,9 +1516,10 @@ function MatchupDisplay({
       >
         <div
           style={{
-            color: muted
-              ? "#8b949e"
-              : "#ffffff",
+            color:
+              muted
+                ? "#8b949e"
+                : "#ffffff",
 
             fontSize:
               "14px",
@@ -943,8 +1530,20 @@ function MatchupDisplay({
                 : "bold",
           }}
         >
-          {matchup.label}
+          {
+            matchup.label
+          }
         </div>
+
+        <SmallOdds
+          value={
+            matchup.odds
+          }
+          label={
+            matchup.oddsLabel ||
+            "ODDS"
+          }
+        />
 
         {matchup.result && (
           <div
@@ -962,7 +1561,9 @@ function MatchupDisplay({
                 "bold",
             }}
           >
-            {matchup.result}
+            {
+              matchup.result
+            }
           </div>
         )}
       </div>
@@ -1029,7 +1630,15 @@ function MatchupDisplay({
             1.45,
         }}
       >
-        {matchup.ownTeam}
+        {
+          matchup.ownTeam
+        }
+
+        <SmallOdds
+          value={
+            matchup.ownOdds
+          }
+        />
 
         {ownWon && (
           <div
@@ -1106,7 +1715,15 @@ function MatchupDisplay({
             1.45,
         }}
       >
-        {matchup.opponentTeam}
+        {
+          matchup.opponentTeam
+        }
+
+        <SmallOdds
+          value={
+            matchup.opponentOdds
+          }
+        />
 
         {opponentWon && (
           <div
@@ -1153,7 +1770,9 @@ function MatchupDisplay({
             "bold",
         }}
       >
-        {matchup.score}
+        {
+          matchup.score
+        }
       </div>
     </div>
   );

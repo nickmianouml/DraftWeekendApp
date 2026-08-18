@@ -4,18 +4,42 @@ import { Link } from "react-router-dom";
 import { getPlayers } from "../services/players";
 import { getLiveData } from "../services/live";
 import { getAllPlayerRecords } from "../services/playerRecord";
+import { getCurrentGameMatchups } from "../services/currentGame";
+import {
+  formatAmericanOdds,
+  getOdds,
+} from "../services/odds";
 
 import "../styles/standingsPage.css";
+
+const UPSET_EXCLUDED_GAMES = [
+  "Flip Cup",
+  "Baseball",
+  "Relay Race",
+  "HR Derby",
+  "Mouse Trap",
+  "Fuck Yeah",
+  "Elimination Chamber",
+  "Liars Dice",
+  "Rock Paper Scissors",
+  "Thunderchug",
+];
 
 function Standings() {
   const [standings, setStandings] = useState([]);
   const [live, setLive] = useState(null);
   const [records, setRecords] = useState([]);
+  const [largestUpset, setLargestUpset] =
+    useState(null);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [lastUpdated, setLastUpdated] = useState(null);
+  const [lastUpdated, setLastUpdated] =
+    useState(null);
 
   useEffect(() => {
+    let active = true;
+
     async function loadStandings() {
       try {
         setError("");
@@ -24,24 +48,57 @@ function Standings() {
           playersData,
           liveData,
           recordsData,
+          matchupsResult,
+          oddsResult,
         ] = await Promise.all([
           getPlayers(),
           getLiveData(),
           getAllPlayerRecords(),
+
+          getCurrentGameMatchups().catch(
+            (matchupError) => {
+              console.error(
+                "Largest upset matchup load error:",
+                matchupError
+              );
+
+              return [];
+            }
+          ),
+
+          getOdds().catch((oddsError) => {
+            console.error(
+              "Largest upset odds load error:",
+              oddsError
+            );
+
+            return [];
+          }),
         ]);
 
-        const sortedStandings =
-          [...playersData].sort((a, b) => {
-            if (a.standings !== b.standings) {
-              return a.standings - b.standings;
-            }
+        if (!active) {
+          return;
+        }
 
-            return b.points - a.points;
-          });
+        const sortedStandings = [
+          ...playersData,
+        ].sort((a, b) => {
+          if (a.standings !== b.standings) {
+            return a.standings - b.standings;
+          }
+
+          return b.points - a.points;
+        });
+
+        const upset = findLargestUpset(
+          matchupsResult,
+          oddsResult
+        );
 
         setStandings(sortedStandings);
         setLive(liveData);
         setRecords(recordsData);
+        setLargestUpset(upset);
         setLastUpdated(new Date());
       } catch (err) {
         console.error(
@@ -49,11 +106,15 @@ function Standings() {
           err
         );
 
-        setError(
-          "Unable to load the live standings."
-        );
+        if (active) {
+          setError(
+            "Unable to load the live standings."
+          );
+        }
       } finally {
-        setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
     }
 
@@ -64,7 +125,10 @@ function Standings() {
       10000
     );
 
-    return () => clearInterval(interval);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
   }, []);
 
   if (loading) {
@@ -143,11 +207,14 @@ function Standings() {
             }}
           >
             Updated{" "}
-            {lastUpdated.toLocaleTimeString([], {
-              hour: "numeric",
-              minute: "2-digit",
-              second: "2-digit",
-            })}
+            {lastUpdated.toLocaleTimeString(
+              [],
+              {
+                hour: "numeric",
+                minute: "2-digit",
+                second: "2-digit",
+              }
+            )}
           </p>
         )}
       </div>
@@ -165,13 +232,8 @@ function Standings() {
           }
         />
 
-        <SummaryTile
-          icon="🎡"
-          label="Total Spins"
-          value={
-            live?.["Total Spins"] || "0"
-          }
-          detail="Awarded"
+        <UpsetTile
+          upset={largestUpset}
         />
 
         <SummaryTile
@@ -209,7 +271,9 @@ function Standings() {
               Math.max(
                 0,
                 firstPlacePoints -
-                  Number(player.points || 0)
+                  Number(
+                    player.points || 0
+                  )
               );
 
             const record =
@@ -280,7 +344,8 @@ function Standings() {
                           }}
                         >
                           {Number(
-                            player.points || 0
+                            player.points ||
+                              0
                           ).toLocaleString()}
                         </strong>
 
@@ -309,11 +374,15 @@ function Standings() {
                           textAlign: "center",
                         }}
                       >
-                        {record.wins}-{record.losses}
+                        {record.wins}-
+                        {record.losses}
                         {" · "}
-                        {formatWinPct(record.winPct)}
+                        {formatWinPct(
+                          record.winPct
+                        )}
                         {" · "}
-                        Win Rank #{record.winRank}
+                        Win Rank #
+                        {record.winRank}
                       </div>
                     </div>
 
@@ -385,6 +454,95 @@ function Standings() {
             );
           }
         )}
+      </div>
+    </div>
+  );
+}
+
+function UpsetTile({ upset }) {
+  if (!upset) {
+    return (
+      <div className="standings-summary-tile">
+        <span className="summary-label">
+          😱 Largest Upset
+        </span>
+
+        <strong className="summary-value">
+          —
+        </strong>
+
+        <span className="summary-detail">
+          No upsets yet
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="standings-summary-tile">
+      <span className="summary-label">
+        😱 Largest Upset
+      </span>
+
+      <strong
+        className="summary-value"
+        style={{
+          color: "#58a6ff",
+        }}
+      >
+        {formatAmericanOdds(
+          upset.odds
+        )}
+      </strong>
+
+      <div
+        style={{
+          marginTop: "4px",
+          textAlign: "center",
+          lineHeight: 1.2,
+        }}
+      >
+        <div
+          style={{
+            color: "#3fb950",
+            fontWeight: "bold",
+            fontSize: "13px",
+          }}
+        >
+          {upset.winner}
+        </div>
+
+        <div
+          style={{
+            color: "#8b949e",
+            fontSize: "10px",
+            fontWeight: "bold",
+            margin: "2px 0",
+            textTransform: "uppercase",
+          }}
+        >
+          vs
+        </div>
+
+        <div
+          style={{
+            color: "#ffffff",
+            fontWeight: "bold",
+            fontSize: "13px",
+          }}
+        >
+          {upset.loser}
+        </div>
+
+        <div
+          style={{
+            color: "#8b949e",
+            fontSize: "11px",
+            marginTop: "5px",
+          }}
+        >
+          {upset.game}
+        </div>
       </div>
     </div>
   );
@@ -494,6 +652,275 @@ function normalizeName(value) {
     .replace(/\s+/g, " ");
 }
 
+function normalizeGameName(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeTeam(value) {
+  return String(value || "")
+    .split(
+      /\s*\/\s*|\s*,\s*|\s*&\s*/
+    )
+    .map(normalizeName)
+    .filter(Boolean)
+    .sort()
+    .join("|");
+}
+
+function isUpsetEligibleGame(
+  gameName
+) {
+  const normalizedGame =
+    normalizeGameName(gameName);
+
+  return !UPSET_EXCLUDED_GAMES.some(
+    (excludedGame) =>
+      normalizeGameName(
+        excludedGame
+      ) === normalizedGame
+  );
+}
+
+function findLargestUpset(
+  matchups,
+  odds
+) {
+  const candidates = [];
+
+  for (const matchup of matchups || []) {
+    if (
+      !isUpsetEligibleGame(
+        matchup.game
+      )
+    ) {
+      continue;
+    }
+
+    const winnerSide =
+      getMatchupWinnerSide(
+        matchup.score1,
+        matchup.score2
+      );
+
+    if (!winnerSide) {
+      continue;
+    }
+
+    const matchupOdds =
+      findOddsForMatchup(
+        odds,
+        matchup
+      );
+
+    if (!matchupOdds) {
+      continue;
+    }
+
+    const winningOddsRaw =
+      winnerSide === 1
+        ? matchupOdds.odds1
+        : matchupOdds.odds2;
+
+    const winningOdds =
+      parseAmericanOdds(
+        winningOddsRaw
+      );
+
+    if (
+      winningOdds === null ||
+      winningOdds <= 0
+    ) {
+      continue;
+    }
+
+    candidates.push({
+      game: matchup.game,
+
+      winner:
+        winnerSide === 1
+          ? matchup.team1
+          : matchup.team2,
+
+      loser:
+        winnerSide === 1
+          ? matchup.team2
+          : matchup.team1,
+
+      odds: winningOdds,
+
+      losingOdds:
+        winnerSide === 1
+          ? matchupOdds.odds2
+          : matchupOdds.odds1,
+    });
+  }
+
+  if (
+    candidates.length === 0
+  ) {
+    return null;
+  }
+
+  candidates.sort(
+    (a, b) =>
+      b.odds - a.odds
+  );
+
+  return candidates[0];
+}
+
+function findOddsForMatchup(
+  odds,
+  matchup
+) {
+  const targetGame =
+    normalizeGameName(
+      matchup.game
+    );
+
+  const team1 =
+    normalizeTeam(
+      matchup.team1
+    );
+
+  const team2 =
+    normalizeTeam(
+      matchup.team2
+    );
+
+  const gameOdds =
+    (odds || []).filter(
+      (item) =>
+        normalizeGameName(
+          item.game
+        ) === targetGame &&
+        normalizeName(
+          item.type
+        ) === "matchup"
+    );
+
+  const direct =
+    gameOdds.find(
+      (item) =>
+        normalizeTeam(
+          item.team1
+        ) === team1 &&
+        normalizeTeam(
+          item.team2
+        ) === team2
+    );
+
+  if (direct) {
+    return {
+      odds1: direct.odds1,
+      odds2: direct.odds2,
+    };
+  }
+
+  const reversed =
+    gameOdds.find(
+      (item) =>
+        normalizeTeam(
+          item.team1
+        ) === team2 &&
+        normalizeTeam(
+          item.team2
+        ) === team1
+    );
+
+  if (reversed) {
+    return {
+      odds1: reversed.odds2,
+      odds2: reversed.odds1,
+    };
+  }
+
+  return null;
+}
+
+function getMatchupWinnerSide(
+  score1,
+  score2
+) {
+  const raw1 =
+    String(score1 ?? "").trim();
+
+  const raw2 =
+    String(score2 ?? "").trim();
+
+  if (!raw1 || !raw2) {
+    return null;
+  }
+
+  const result1 =
+    raw1.toUpperCase();
+
+  const result2 =
+    raw2.toUpperCase();
+
+  if (result1 === "W") {
+    return 1;
+  }
+
+  if (result2 === "W") {
+    return 2;
+  }
+
+  if (
+    result1 === "L" &&
+    result2 !== "L"
+  ) {
+    return 2;
+  }
+
+  if (
+    result2 === "L" &&
+    result1 !== "L"
+  ) {
+    return 1;
+  }
+
+  const number1 =
+    Number(raw1);
+
+  const number2 =
+    Number(raw2);
+
+  if (
+    Number.isNaN(number1) ||
+    Number.isNaN(number2) ||
+    number1 === number2
+  ) {
+    return null;
+  }
+
+  return number1 > number2
+    ? 1
+    : 2;
+}
+
+function parseAmericanOdds(value) {
+  const raw =
+    String(value ?? "")
+      .trim()
+      .replace(/,/g, "");
+
+  if (!raw) {
+    return null;
+  }
+
+  const number =
+    Number(raw);
+
+  if (Number.isNaN(number)) {
+    return null;
+  }
+
+  return number;
+}
+
 function findPlayerRecord(
   records,
   playerName
@@ -501,8 +928,12 @@ function findPlayerRecord(
   return (
     records.find(
       (record) =>
-        normalizeName(record.player) ===
-        normalizeName(playerName)
+        normalizeName(
+          record.player
+        ) ===
+        normalizeName(
+          playerName
+        )
     ) || {
       wins: 0,
       losses: 0,
@@ -559,7 +990,9 @@ function formatWinPct(value) {
     return "0.0%";
   }
 
-  return `${(number * 100).toFixed(1)}%`;
+  return `${(
+    number * 100
+  ).toFixed(1)}%`;
 }
 
 export default Standings;

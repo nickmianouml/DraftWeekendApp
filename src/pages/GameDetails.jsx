@@ -13,6 +13,10 @@ import { getPlacementsForGame } from "../services/placements";
 import { getCaptainGame } from "../services/captains";
 import { getExtrasForGame } from "../services/gameExtras";
 import { getGameStatuses } from "../services/gameStatus";
+import {
+  formatAmericanOdds,
+  getOddsForGame,
+} from "../services/odds";
 
 function GameDetails() {
   const { gameId } = useParams();
@@ -22,21 +26,53 @@ function GameDetails() {
   const backTarget =
     location.state?.fromPlayer || "/games";
 
-  const [gameData, setGameData] = useState([]);
-  const [matchups, setMatchups] = useState([]);
-  const [placements, setPlacements] = useState([]);
-  const [captainGame, setCaptainGame] = useState(null);
-  const [extras, setExtras] = useState([]);
-  const [liveStatuses, setLiveStatuses] = useState([]);
+  const [gameData, setGameData] =
+    useState([]);
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [lastUpdated, setLastUpdated] = useState(null);
+  const [matchups, setMatchups] =
+    useState([]);
 
-  const game = games.find((item) => item.id === gameId);
+  const [placements, setPlacements] =
+    useState([]);
 
-  const gameName = game ? game.name : "";
-  const gameIcon = game ? game.icon : "";
+  const [
+    captainGame,
+    setCaptainGame,
+  ] = useState(null);
+
+  const [extras, setExtras] =
+    useState([]);
+
+  const [
+    liveStatuses,
+    setLiveStatuses,
+  ] = useState([]);
+
+  const [odds, setOdds] =
+    useState([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState("");
+
+  const [
+    lastUpdated,
+    setLastUpdated,
+  ] = useState(null);
+
+  const game =
+    games.find(
+      (item) =>
+        item.id === gameId
+    );
+
+  const gameName =
+    game ? game.name : "";
+
+  const gameIcon =
+    game ? game.icon : "";
 
   const placementGames = [
     "Fuck Yeah",
@@ -52,98 +88,223 @@ function GameDetails() {
   ];
 
   const isPlacementGame =
-    placementGames.includes(gameName);
+    placementGames.includes(
+      gameName
+    );
 
   const isCaptainGame =
-    captainGames.includes(gameName);
+    captainGames.includes(
+      gameName
+    );
 
   const isRPS =
-    gameName === "Rock Paper Scissors";
+    gameName ===
+    "Rock Paper Scissors";
 
   const isEliminationChamber =
-    gameName === "Elimination Chamber";
+    gameName ===
+    "Elimination Chamber";
 
   useEffect(() => {
+    let active = true;
+
     async function loadGame() {
       if (!gameName) {
-        setError("Game not found.");
+        setError(
+          "Game not found."
+        );
+
         setLoading(false);
+
         return;
       }
 
       try {
         setError("");
 
-        const [statsData, statusData] =
+        /*
+          Odds are intentionally
+          non-critical. If the Odds
+          API has a temporary issue,
+          the game itself still loads.
+        */
+        const [
+          statsData,
+          statusData,
+          oddsData,
+        ] =
           await Promise.all([
-            getGameData(gameName),
+            getGameData(
+              gameName
+            ),
+
             getGameStatuses(),
+
+            getOddsForGame(
+              gameName
+            ).catch(
+              (oddsError) => {
+                console.error(
+                  "Odds load error:",
+                  oddsError
+                );
+
+                return [];
+              }
+            ),
           ]);
 
-        setGameData(statsData);
-        setLiveStatuses(statusData);
+        if (!active) {
+          return;
+        }
 
-        if (isEliminationChamber) {
+        setGameData(
+          statsData
+        );
+
+        setLiveStatuses(
+          statusData
+        );
+
+        setOdds(
+          oddsData
+        );
+
+        if (
+          isEliminationChamber
+        ) {
           const extrasData =
-            await getExtrasForGame(gameName);
+            await getExtrasForGame(
+              gameName
+            );
 
-          setExtras(extrasData);
+          if (!active) {
+            return;
+          }
+
+          setExtras(
+            extrasData
+          );
+
           setPlacements([]);
           setMatchups([]);
-          setCaptainGame(null);
-        } else if (isPlacementGame) {
-          const placementData =
-            await getPlacementsForGame(gameName);
 
-          setPlacements(placementData);
+          setCaptainGame(
+            null
+          );
+        } else if (
+          isPlacementGame
+        ) {
+          const placementData =
+            await getPlacementsForGame(
+              gameName
+            );
+
+          if (!active) {
+            return;
+          }
+
+          setPlacements(
+            placementData
+          );
+
           setMatchups([]);
-          setCaptainGame(null);
+
+          setCaptainGame(
+            null
+          );
+
           setExtras([]);
-        } else if (isCaptainGame) {
-          const [captainData, extrasData] =
+        } else if (
+          isCaptainGame
+        ) {
+          const [
+            captainData,
+            extrasData,
+          ] =
             await Promise.all([
-              getCaptainGame(gameName),
-              getExtrasForGame(gameName),
+              getCaptainGame(
+                gameName
+              ),
+
+              getExtrasForGame(
+                gameName
+              ),
             ]);
 
-          setCaptainGame(captainData);
-          setExtras(extrasData);
+          if (!active) {
+            return;
+          }
+
+          setCaptainGame(
+            captainData
+          );
+
+          setExtras(
+            extrasData
+          );
+
           setMatchups([]);
           setPlacements([]);
         } else {
           const matchupData =
-            await getMatchupsForGame(gameName);
+            await getMatchupsForGame(
+              gameName
+            );
 
-          setMatchups(matchupData);
+          if (!active) {
+            return;
+          }
+
+          setMatchups(
+            matchupData
+          );
+
           setPlacements([]);
-          setCaptainGame(null);
+
+          setCaptainGame(
+            null
+          );
+
           setExtras([]);
         }
 
-        setLastUpdated(new Date());
+        setLastUpdated(
+          new Date()
+        );
       } catch (err) {
         console.error(
           "Game details error:",
           err
         );
 
-        setError(
-          "Unable to load game data."
-        );
+        if (active) {
+          setError(
+            "Unable to load game data."
+          );
+        }
       } finally {
-        setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
     }
 
     loadGame();
 
-    const interval = setInterval(
-      loadGame,
-      10000
-    );
+    const interval =
+      setInterval(
+        loadGame,
+        10000
+      );
 
-    return () =>
-      clearInterval(interval);
+    return () => {
+      active = false;
+
+      clearInterval(
+        interval
+      );
+    };
   }, [
     gameName,
     isPlacementGame,
@@ -151,20 +312,30 @@ function GameDetails() {
     isEliminationChamber,
   ]);
 
-  function getStatusDisplay(status) {
+  function getStatusDisplay(
+    status
+  ) {
     const normalized =
-      String(status || "")
+      String(
+        status || ""
+      )
         .trim()
         .toLowerCase();
 
-    if (normalized === "in progress") {
+    if (
+      normalized ===
+      "in progress"
+    ) {
       return {
         text: "● LIVE",
         color: "#3fb950",
       };
     }
 
-    if (normalized === "complete") {
+    if (
+      normalized ===
+      "complete"
+    ) {
       return {
         text: "✓ Complete",
         color: "#8b949e",
@@ -177,19 +348,31 @@ function GameDetails() {
     };
   }
 
-  function getPlaceLabel(place) {
+  function getPlaceLabel(
+    place
+  ) {
     const rawPlace =
-      String(place || "").trim();
+      String(
+        place || ""
+      ).trim();
 
     if (!rawPlace) {
       return "";
     }
 
-    const number = Number(
-      rawPlace.replace(/[^\d]/g, "")
-    );
+    const number =
+      Number(
+        rawPlace.replace(
+          /[^\d]/g,
+          ""
+        )
+      );
 
-    if (Number.isNaN(number)) {
+    if (
+      Number.isNaN(
+        number
+      )
+    ) {
       return rawPlace;
     }
 
@@ -205,15 +388,21 @@ function GameDetails() {
       return "🥉 3rd";
     }
 
-    return `${number}${getOrdinalSuffix(number)}`;
+    return `${number}${getOrdinalSuffix(
+      number
+    )}`;
   }
 
   function getGameStatus() {
-    if (isEliminationChamber) {
+    if (
+      isEliminationChamber
+    ) {
       const match =
         liveStatuses.find(
           (item) =>
-            String(item.game || "")
+            String(
+              item.game || ""
+            )
               .trim()
               .toLowerCase() ===
             "elimination chamber"
@@ -224,13 +413,18 @@ function GameDetails() {
       );
     }
 
-    if (isPlacementGame) {
+    if (
+      isPlacementGame
+    ) {
       return getStatusDisplay(
-        placements[0]?.status
+        placements[0]
+          ?.status
       );
     }
 
-    if (isCaptainGame) {
+    if (
+      isCaptainGame
+    ) {
       return getStatusDisplay(
         captainGame?.status
       );
@@ -246,13 +440,17 @@ function GameDetails() {
       <div>
         <button
           onClick={() =>
-            navigate(backTarget)
+            navigate(
+              backTarget
+            )
           }
         >
           ← Back
         </button>
 
-        <h1>Game Not Found</h1>
+        <h1>
+          Game Not Found
+        </h1>
       </div>
     );
   }
@@ -261,10 +459,14 @@ function GameDetails() {
     return (
       <div>
         <h1>
-          {gameIcon} {gameName}
+          {gameIcon}{" "}
+          {gameName}
         </h1>
 
-        <p>Loading game data...</p>
+        <p>
+          Loading game
+          data...
+        </p>
       </div>
     );
   }
@@ -274,14 +476,17 @@ function GameDetails() {
       <div>
         <button
           onClick={() =>
-            navigate(backTarget)
+            navigate(
+              backTarget
+            )
           }
         >
           ← Back
         </button>
 
         <h1>
-          {gameIcon} {gameName}
+          {gameIcon}{" "}
+          {gameName}
         </h1>
 
         <p>{error}</p>
@@ -293,33 +498,51 @@ function GameDetails() {
     getGameStatus();
 
   const sortedPlacements =
-    gameName === "Liars Dice"
+    gameName ===
+    "Liars Dice"
       ? [...placements]
       : [...placements].sort(
           (a, b) => {
-            const aPlace = Number(
-              String(a.place || "")
-                .replace(/[^\d]/g, "")
-            );
+            const aPlace =
+              Number(
+                String(
+                  a.place || ""
+                ).replace(
+                  /[^\d]/g,
+                  ""
+                )
+              );
 
-            const bPlace = Number(
-              String(b.place || "")
-                .replace(/[^\d]/g, "")
-            );
+            const bPlace =
+              Number(
+                String(
+                  b.place || ""
+                ).replace(
+                  /[^\d]/g,
+                  ""
+                )
+              );
 
             const aHasPlace =
               a.place !== "" &&
-              !Number.isNaN(aPlace);
+              !Number.isNaN(
+                aPlace
+              );
 
             const bHasPlace =
               b.place !== "" &&
-              !Number.isNaN(bPlace);
+              !Number.isNaN(
+                bPlace
+              );
 
             if (
               aHasPlace &&
               bHasPlace
             ) {
-              return aPlace - bPlace;
+              return (
+                aPlace -
+                bPlace
+              );
             }
 
             if (aHasPlace) {
@@ -340,14 +563,24 @@ function GameDetails() {
     <div>
       <button
         onClick={() =>
-          navigate(backTarget)
+          navigate(
+            backTarget
+          )
         }
         style={{
-          marginBottom: "20px",
-          padding: "10px 14px",
-          borderRadius: "8px",
+          marginBottom:
+            "20px",
+
+          padding:
+            "10px 14px",
+
+          borderRadius:
+            "8px",
+
           border: "none",
-          cursor: "pointer",
+
+          cursor:
+            "pointer",
         }}
       >
         ← Back
@@ -355,19 +588,28 @@ function GameDetails() {
 
       <h1
         style={{
-          marginBottom: "6px",
+          marginBottom:
+            "6px",
+
           color: "white",
         }}
       >
-        {gameIcon} {gameName}
+        {gameIcon}{" "}
+        {gameName}
       </h1>
 
       <p
         style={{
-          color: gameStatus.color,
-          fontWeight: "bold",
+          color:
+            gameStatus.color,
+
+          fontWeight:
+            "bold",
+
           marginTop: 0,
-          marginBottom: "6px",
+
+          marginBottom:
+            "6px",
         }}
       >
         {gameStatus.text}
@@ -376,19 +618,30 @@ function GameDetails() {
       {lastUpdated && (
         <p
           style={{
-            color: "#8b949e",
-            fontSize: "13px",
+            color:
+              "#8b949e",
+
+            fontSize:
+              "13px",
+
             marginTop: 0,
-            marginBottom: "20px",
+
+            marginBottom:
+              "20px",
           }}
         >
           Updated{" "}
           {lastUpdated.toLocaleTimeString(
             [],
             {
-              hour: "numeric",
-              minute: "2-digit",
-              second: "2-digit",
+              hour:
+                "numeric",
+
+              minute:
+                "2-digit",
+
+              second:
+                "2-digit",
             }
           )}
         </p>
@@ -400,30 +653,48 @@ function GameDetails() {
             captainGame={
               captainGame
             }
-            gameName={gameName}
-            extras={extras}
-            gameStatus={gameStatus}
+            gameName={
+              gameName
+            }
+            extras={
+              extras
+            }
+            gameStatus={
+              gameStatus
+            }
+            odds={odds}
           />
         )}
 
       {isEliminationChamber &&
-        extras.length > 0 && (
+        extras.length >
+          0 && (
           <EliminationChamberSection
             extras={extras}
-            gameStatus={gameStatus}
+            gameStatus={
+              gameStatus
+            }
+            odds={odds}
           />
         )}
 
       {isPlacementGame &&
-        sortedPlacements.length > 0 && (
+        sortedPlacements.length >
+          0 && (
           <PlacementSection
             placements={
               sortedPlacements
             }
-            gameStatus={gameStatus}
+            gameStatus={
+              gameStatus
+            }
             getPlaceLabel={
               getPlaceLabel
             }
+            gameName={
+              gameName
+            }
+            odds={odds}
           />
         )}
 
@@ -433,16 +704,25 @@ function GameDetails() {
         matchups.length > 0 &&
         (isRPS ? (
           <RPSSection
-            matchups={matchups}
-            gameStatus={gameStatus}
+            matchups={
+              matchups
+            }
+            gameStatus={
+              gameStatus
+            }
           />
         ) : (
           <MatchupSection
-            matchups={matchups}
-            gameStatus={gameStatus}
+            matchups={
+              matchups
+            }
+            gameStatus={
+              gameStatus
+            }
             getStatusDisplay={
               getStatusDisplay
             }
+            odds={odds}
           />
         ))}
 
@@ -453,7 +733,9 @@ function GameDetails() {
   );
 }
 
-function getOrdinalSuffix(number) {
+function getOrdinalSuffix(
+  number
+) {
   const mod100 =
     number % 100;
 
@@ -467,28 +749,43 @@ function getOrdinalSuffix(number) {
   switch (number % 10) {
     case 1:
       return "st";
+
     case 2:
       return "nd";
+
     case 3:
       return "rd";
+
     default:
       return "th";
   }
 }
 
-function formatOrdinal(value) {
+function formatOrdinal(
+  value
+) {
   const raw =
-    String(value || "").trim();
+    String(
+      value || ""
+    ).trim();
 
   if (!raw) {
     return "—";
   }
 
-  const number = Number(
-    raw.replace(/[^\d]/g, "")
-  );
+  const number =
+    Number(
+      raw.replace(
+        /[^\d]/g,
+        ""
+      )
+    );
 
-  if (Number.isNaN(number)) {
+  if (
+    Number.isNaN(
+      number
+    )
+  ) {
     return raw;
   }
 
@@ -504,24 +801,265 @@ function formatOrdinal(value) {
     return "🥉 3rd";
   }
 
-  return `${number}${getOrdinalSuffix(number)}`;
+  return `${number}${getOrdinalSuffix(
+    number
+  )}`;
 }
 
-function normalizeName(value) {
-  return String(value || "")
+function normalizeName(
+  value
+) {
+  return String(
+    value || ""
+  )
     .trim()
     .toLowerCase()
-    .replace(/\s+/g, " ");
+    .replace(
+      /\s+/g,
+      " "
+    );
 }
 
-function getWinnerSide(score1, score2) {
+function normalizeTeam(
+  value
+) {
+  return String(
+    value || ""
+  )
+    .split(
+      /\s*\/\s*|\s*,\s*|\s*&\s*/
+    )
+    .map(
+      normalizeName
+    )
+    .filter(Boolean)
+    .sort()
+    .join("|");
+}
+
+function getMatchupOdds(
+  odds,
+  team1,
+  team2
+) {
+  const firstTeam =
+    normalizeTeam(
+      team1
+    );
+
+  const secondTeam =
+    normalizeTeam(
+      team2
+    );
+
+  const direct =
+    (odds || []).find(
+      (item) =>
+        item.type ===
+          "Matchup" &&
+        normalizeTeam(
+          item.team1
+        ) === firstTeam &&
+        normalizeTeam(
+          item.team2
+        ) === secondTeam
+    );
+
+  if (direct) {
+    return {
+      odds1:
+        direct.odds1,
+
+      odds2:
+        direct.odds2,
+    };
+  }
+
+  const reversed =
+    (odds || []).find(
+      (item) =>
+        item.type ===
+          "Matchup" &&
+        normalizeTeam(
+          item.team1
+        ) === secondTeam &&
+        normalizeTeam(
+          item.team2
+        ) === firstTeam
+    );
+
+  if (reversed) {
+    return {
+      odds1:
+        reversed.odds2,
+
+      odds2:
+        reversed.odds1,
+    };
+  }
+
+  return {
+    odds1: "",
+    odds2: "",
+  };
+}
+
+function getCaptainOdds(
+  odds,
+  captain1,
+  captain2
+) {
+  const direct =
+    (odds || []).find(
+      (item) =>
+        item.type ===
+          "Matchup" &&
+        normalizeName(
+          item.team1
+        ) ===
+          normalizeName(
+            captain1
+          ) &&
+        normalizeName(
+          item.team2
+        ) ===
+          normalizeName(
+            captain2
+          )
+    );
+
+  if (direct) {
+    return {
+      odds1:
+        direct.odds1,
+
+      odds2:
+        direct.odds2,
+    };
+  }
+
+  const reversed =
+    (odds || []).find(
+      (item) =>
+        item.type ===
+          "Matchup" &&
+        normalizeName(
+          item.team1
+        ) ===
+          normalizeName(
+            captain2
+          ) &&
+        normalizeName(
+          item.team2
+        ) ===
+          normalizeName(
+            captain1
+          )
+    );
+
+  if (reversed) {
+    return {
+      odds1:
+        reversed.odds2,
+
+      odds2:
+        reversed.odds1,
+    };
+  }
+
+  return {
+    odds1: "",
+    odds2: "",
+  };
+}
+
+function getOutrightOdds(
+  odds,
+  participant
+) {
+  const participantTeam =
+    normalizeTeam(
+      participant
+    );
+
+  const participantName =
+    normalizeName(
+      participant
+    );
+
+  const teamMatch =
+    (odds || []).find(
+      (item) => {
+        if (
+          item.type !==
+          "Team Outright"
+        ) {
+          return false;
+        }
+
+        const sourceTeam =
+          normalizeTeam(
+            [
+              item.player1,
+              item.player2,
+            ]
+              .filter(
+                Boolean
+              )
+              .join(
+                " / "
+              )
+          );
+
+        return (
+          sourceTeam ===
+          participantTeam
+        );
+      }
+    );
+
+  if (teamMatch) {
+    return (
+      teamMatch.outrightOdds
+    );
+  }
+
+  const playerMatch =
+    (odds || []).find(
+      (item) =>
+        item.type ===
+          "Individual Outright" &&
+        normalizeName(
+          item.player1
+        ) ===
+          participantName
+    );
+
+  return (
+    playerMatch
+      ?.outrightOdds ||
+    ""
+  );
+}
+
+function getWinnerSide(
+  score1,
+  score2
+) {
   const raw1 =
-    String(score1 ?? "").trim();
+    String(
+      score1 ?? ""
+    ).trim();
 
   const raw2 =
-    String(score2 ?? "").trim();
+    String(
+      score2 ?? ""
+    ).trim();
 
-  if (!raw1 || !raw2) {
+  if (
+    !raw1 ||
+    !raw2
+  ) {
     return null;
   }
 
@@ -531,11 +1069,15 @@ function getWinnerSide(score1, score2) {
   const result2 =
     raw2.toUpperCase();
 
-  if (result1 === "W") {
+  if (
+    result1 === "W"
+  ) {
     return 1;
   }
 
-  if (result2 === "W") {
+  if (
+    result2 === "W"
+  ) {
     return 2;
   }
 
@@ -553,20 +1095,86 @@ function getWinnerSide(score1, score2) {
     return 1;
   }
 
-  const number1 = Number(raw1);
-  const number2 = Number(raw2);
+  const number1 =
+    Number(raw1);
+
+  const number2 =
+    Number(raw2);
 
   if (
-    Number.isNaN(number1) ||
-    Number.isNaN(number2) ||
+    Number.isNaN(
+      number1
+    ) ||
+    Number.isNaN(
+      number2
+    ) ||
     number1 === number2
   ) {
     return null;
   }
 
-  return number1 > number2
+  return number1 >
+    number2
     ? 1
     : 2;
+}
+
+function OddsValue({
+  value,
+  label = "ODDS",
+}) {
+  if (
+    value === "" ||
+    value === null ||
+    value === undefined
+  ) {
+    return null;
+  }
+
+  return (
+    <div
+      style={{
+        marginTop: "7px",
+      }}
+    >
+      <span
+        style={{
+          display: "block",
+
+          color:
+            "#8b949e",
+
+          fontSize:
+            "9px",
+
+          fontWeight:
+            "bold",
+
+          letterSpacing:
+            "0.6px",
+
+          marginBottom:
+            "2px",
+        }}
+      >
+        {label}
+      </span>
+
+      <strong
+        style={{
+          color:
+            "#58a6ff",
+
+          fontSize:
+            "15px",
+        }}
+      >
+        {formatAmericanOdds(
+          value
+        )}
+      </strong>
+    </div>
+  );
 }
 
 function CaptainTeams({
@@ -574,6 +1182,7 @@ function CaptainTeams({
   gameName,
   extras,
   gameStatus,
+  odds,
 }) {
   const team1Players = [
     captainGame.captain1,
@@ -586,7 +1195,8 @@ function CaptainTeams({
   ].filter(Boolean);
 
   const isHRDerby =
-    gameName === "HR Derby";
+    gameName ===
+    "HR Derby";
 
   const winnerSide =
     getWinnerSide(
@@ -594,42 +1204,59 @@ function CaptainTeams({
       captainGame.score2
     );
 
+  const captainOdds =
+    getCaptainOdds(
+      odds,
+      captainGame.captain1,
+      captainGame.captain2
+    );
+
   const homeRunTotals = {};
 
   if (isHRDerby) {
-    extras.forEach((item) => {
-      const type = String(
-        item.type || ""
-      )
-        .trim()
-        .toLowerCase();
+    extras.forEach(
+      (item) => {
+        const type =
+          String(
+            item.type || ""
+          )
+            .trim()
+            .toLowerCase();
 
-      const player =
-        normalizeName(
-          item.team1
-        );
+        const player =
+          normalizeName(
+            item.team1
+          );
 
-      const rawTotal =
-        String(
-          item.team2 ?? ""
-        ).trim();
-
-      if (
-        type === "home runs" &&
-        player &&
-        rawTotal !== ""
-      ) {
-        const total =
-          Number(rawTotal);
+        const rawTotal =
+          String(
+            item.team2 ??
+              ""
+          ).trim();
 
         if (
-          !Number.isNaN(total)
+          type ===
+            "home runs" &&
+          player &&
+          rawTotal !== ""
         ) {
-          homeRunTotals[player] =
-            total;
+          const total =
+            Number(
+              rawTotal
+            );
+
+          if (
+            !Number.isNaN(
+              total
+            )
+          ) {
+            homeRunTotals[
+              player
+            ] = total;
+          }
         }
       }
-    });
+    );
   }
 
   function getHomeRuns(
@@ -650,7 +1277,11 @@ function CaptainTeams({
         key
       )
     ) {
-      return homeRunTotals[key];
+      return (
+        homeRunTotals[
+          key
+        ]
+      );
     }
 
     return null;
@@ -661,20 +1292,30 @@ function CaptainTeams({
       style={{
         backgroundColor:
           "#161b22",
+
         border:
           gameStatus.text ===
           "● LIVE"
             ? "1px solid #3fb950"
             : "1px solid #30363d",
-        borderRadius: "16px",
-        padding: "18px",
-        marginBottom: "24px",
+
+        borderRadius:
+          "16px",
+
+        padding:
+          "18px",
+
+        marginBottom:
+          "24px",
       }}
     >
       <h2
         style={{
           marginTop: 0,
-          textAlign: "center",
+
+          textAlign:
+            "center",
+
           color: "white",
         }}
       >
@@ -684,8 +1325,10 @@ function CaptainTeams({
       <div
         style={{
           display: "grid",
+
           gridTemplateColumns:
             "1fr 50px 1fr",
+
           gap: "10px",
         }}
       >
@@ -705,18 +1348,29 @@ function CaptainTeams({
           isWinner={
             winnerSide === 1
           }
+          odds={
+            captainOdds.odds1
+          }
         />
 
         <div
           style={{
             display: "flex",
+
             justifyContent:
               "center",
+
             alignItems:
               "flex-start",
-            paddingTop: "38px",
-            color: "#8b949e",
-            fontWeight: "bold",
+
+            paddingTop:
+              "38px",
+
+            color:
+              "#8b949e",
+
+            fontWeight:
+              "bold",
           }}
         >
           VS
@@ -737,6 +1391,9 @@ function CaptainTeams({
           }
           isWinner={
             winnerSide === 2
+          }
+          odds={
+            captainOdds.odds2
           }
         />
       </div>
@@ -767,14 +1424,18 @@ function CaptainTeams({
       {gameName ===
         "Flip Cup" && (
         <FlipCupRounds
-          extras={extras}
+          extras={
+            extras
+          }
         />
       )}
 
       {gameName ===
         "Baseball" && (
         <BaseballBoxScore
-          extras={extras}
+          extras={
+            extras
+          }
           captain1={
             captainGame.captain1
           }
@@ -793,46 +1454,66 @@ function TeamRoster({
   showHomeRuns,
   getHomeRuns,
   isWinner = false,
+  odds,
 }) {
   const captainHomeRuns =
     showHomeRuns
-      ? getHomeRuns(captain)
+      ? getHomeRuns(
+          captain
+        )
       : null;
 
   return (
     <div
       style={{
-        textAlign: "center",
+        textAlign:
+          "center",
+
         backgroundColor:
           isWinner
             ? "rgba(46, 160, 67, 0.14)"
             : "transparent",
+
         border:
           isWinner
             ? "1px solid #3fb950"
             : "1px solid transparent",
-        borderRadius: "10px",
+
+        borderRadius:
+          "10px",
+
         padding: "10px",
       }}
     >
       <div
         style={{
           display: "flex",
+
           justifyContent:
             "center",
-          alignItems: "center",
+
+          alignItems:
+            "center",
+
           gap: "8px",
-          marginBottom: "4px",
+
+          marginBottom:
+            "4px",
+
           flexWrap: "wrap",
         }}
       >
         <strong
           style={{
-            fontSize: "18px",
-            color: "#f2cc60",
+            fontSize:
+              "18px",
+
+            color:
+              "#f2cc60",
           }}
         >
-          {captain || "TBD"}
+          {captain ||
+            "TBD"}
         </strong>
 
         {showHomeRuns &&
@@ -842,13 +1523,18 @@ function TeamRoster({
               style={{
                 color:
                   "#f2cc60",
+
                 fontSize:
                   "14px",
+
                 whiteSpace:
                   "nowrap",
               }}
             >
-              {captainHomeRuns} HR
+              {
+                captainHomeRuns
+              }{" "}
+              HR
             </strong>
           )}
       </div>
@@ -856,30 +1542,61 @@ function TeamRoster({
       <span
         style={{
           display: "block",
-          color: "#8b949e",
-          fontSize: "11px",
-          fontWeight: "bold",
+
+          color:
+            "#8b949e",
+
+          fontSize:
+            "11px",
+
+          fontWeight:
+            "bold",
+
           marginBottom:
             isWinner
               ? "4px"
-              : "12px",
+              : "4px",
         }}
       >
         CAPTAIN
       </span>
 
+      <OddsValue
+        value={odds}
+      />
+
       {isWinner && (
         <span
           style={{
-            display: "block",
-            color: "#3fb950",
-            fontSize: "10px",
-            fontWeight: "bold",
-            marginBottom: "10px",
+            display:
+              "block",
+
+            color:
+              "#3fb950",
+
+            fontSize:
+              "10px",
+
+            fontWeight:
+              "bold",
+
+            marginTop:
+              "6px",
+
+            marginBottom:
+              "10px",
           }}
         >
           WINNER
         </span>
+      )}
+
+      {!isWinner && (
+        <div
+          style={{
+            height: "10px",
+          }}
+        />
       )}
 
       {players
@@ -902,18 +1619,24 @@ function TeamRoster({
                 style={{
                   padding:
                     "10px 4px",
+
                   borderTop:
                     "1px solid #30363d",
+
                   fontSize:
                     "15px",
+
                   display:
                     "flex",
+
                   justifyContent:
                     showHomeRuns
                       ? "space-between"
                       : "center",
+
                   alignItems:
                     "center",
+
                   gap: "8px",
                 }}
               >
@@ -922,11 +1645,14 @@ function TeamRoster({
                     style={{
                       color:
                         "#8b949e",
+
                       marginRight:
                         "5px",
                     }}
                   >
-                    {index + 1}.
+                    {index +
+                      1}
+                    .
                   </span>
 
                   <span>
@@ -941,13 +1667,18 @@ function TeamRoster({
                       style={{
                         color:
                           "#f2cc60",
+
                         fontSize:
                           "14px",
+
                         whiteSpace:
                           "nowrap",
                       }}
                     >
-                      {homeRuns} HR
+                      {
+                        homeRuns
+                      }{" "}
+                      HR
                     </strong>
                   )}
               </div>
@@ -955,11 +1686,15 @@ function TeamRoster({
           }
         )}
 
-      {players.length === 1 && (
+      {players.length ===
+        1 && (
         <p
           style={{
-            color: "#8b949e",
-            fontSize: "13px",
+            color:
+              "#8b949e",
+
+            fontSize:
+              "13px",
           }}
         >
           Draft pending
@@ -976,19 +1711,32 @@ function FinalScore({
   return (
     <div
       style={{
-        marginTop: "20px",
-        paddingTop: "18px",
+        marginTop:
+          "20px",
+
+        paddingTop:
+          "18px",
+
         borderTop:
           "1px solid #30363d",
-        textAlign: "center",
+
+        textAlign:
+          "center",
       }}
     >
       <div
         style={{
-          color: "#8b949e",
-          fontSize: "12px",
-          fontWeight: "bold",
-          marginBottom: "8px",
+          color:
+            "#8b949e",
+
+          fontSize:
+            "12px",
+
+          fontWeight:
+            "bold",
+
+          marginBottom:
+            "8px",
         }}
       >
         FINAL SCORE
@@ -996,13 +1744,18 @@ function FinalScore({
 
       <div
         style={{
-          fontSize: "30px",
-          fontWeight: "bold",
+          fontSize:
+            "30px",
+
+          fontWeight:
+            "bold",
         }}
       >
-        {score1 || "-"}
+        {score1 ||
+          "-"}
         {"  -  "}
-        {score2 || "-"}
+        {score2 ||
+          "-"}
       </div>
     </div>
   );
@@ -1013,14 +1766,16 @@ function RelayRaceResult({
 }) {
   const team1Result =
     String(
-      captainGame.score1 || ""
+      captainGame.score1 ||
+        ""
     )
       .trim()
       .toUpperCase();
 
   const team2Result =
     String(
-      captainGame.score2 || ""
+      captainGame.score2 ||
+        ""
     )
       .trim()
       .toUpperCase();
@@ -1041,16 +1796,23 @@ function RelayRaceResult({
   return (
     <div
       style={{
-        marginTop: "20px",
-        paddingTop: "18px",
+        marginTop:
+          "20px",
+
+        paddingTop:
+          "18px",
+
         borderTop:
           "1px solid #30363d",
       }}
     >
       <h3
         style={{
-          textAlign: "center",
+          textAlign:
+            "center",
+
           marginTop: 0,
+
           color: "white",
         }}
       >
@@ -1060,8 +1822,10 @@ function RelayRaceResult({
       <div
         style={{
           display: "grid",
+
           gridTemplateColumns:
             "1fr 1fr",
+
           gap: "12px",
         }}
       >
@@ -1069,9 +1833,13 @@ function RelayRaceResult({
           style={{
             backgroundColor:
               "#21262d",
+
             borderRadius:
               "12px",
-            padding: "14px",
+
+            padding:
+              "14px",
+
             textAlign:
               "center",
           }}
@@ -1084,10 +1852,14 @@ function RelayRaceResult({
 
           <div
             style={{
-              marginTop: "6px",
-              color: team1Won
-                ? "#3fb950"
-                : "#8b949e",
+              marginTop:
+                "6px",
+
+              color:
+                team1Won
+                  ? "#3fb950"
+                  : "#8b949e",
+
               fontWeight:
                 "bold",
             }}
@@ -1102,9 +1874,13 @@ function RelayRaceResult({
           style={{
             backgroundColor:
               "#21262d",
+
             borderRadius:
               "12px",
-            padding: "14px",
+
+            padding:
+              "14px",
+
             textAlign:
               "center",
           }}
@@ -1117,10 +1893,14 @@ function RelayRaceResult({
 
           <div
             style={{
-              marginTop: "6px",
-              color: team2Won
-                ? "#3fb950"
-                : "#8b949e",
+              marginTop:
+                "6px",
+
+              color:
+                team2Won
+                  ? "#3fb950"
+                  : "#8b949e",
+
               fontWeight:
                 "bold",
             }}
@@ -1147,16 +1927,23 @@ function FlipCupRounds({
   return (
     <div
       style={{
-        marginTop: "22px",
-        paddingTop: "18px",
+        marginTop:
+          "22px",
+
+        paddingTop:
+          "18px",
+
         borderTop:
           "1px solid #30363d",
       }}
     >
       <h3
         style={{
-          textAlign: "center",
+          textAlign:
+            "center",
+
           marginTop: 0,
+
           color: "white",
         }}
       >
@@ -1170,10 +1957,13 @@ function FlipCupRounds({
             style={{
               display:
                 "grid",
+
               gridTemplateColumns:
                 "1fr 70px 1fr",
+
               alignItems:
                 "center",
+
               padding:
                 "8px 0",
             }}
@@ -1182,8 +1972,10 @@ function FlipCupRounds({
               style={{
                 textAlign:
                   "center",
+
                 fontSize:
                   "20px",
+
                 color:
                   "#3fb950",
               }}
@@ -1196,22 +1988,28 @@ function FlipCupRounds({
               style={{
                 textAlign:
                   "center",
+
                 color:
                   "#8b949e",
+
                 fontSize:
                   "13px",
               }}
             >
               Round{" "}
-              {round.number}
+              {
+                round.number
+              }
             </div>
 
             <div
               style={{
                 textAlign:
                   "center",
+
                 fontSize:
                   "20px",
+
                 color:
                   "#3fb950",
               }}
@@ -1239,7 +2037,10 @@ function BaseballBoxScore({
 
   const total1 =
     extras.reduce(
-      (total, inning) =>
+      (
+        total,
+        inning
+      ) =>
         total +
         (Number(
           inning.team1
@@ -1249,7 +2050,10 @@ function BaseballBoxScore({
 
   const total2 =
     extras.reduce(
-      (total, inning) =>
+      (
+        total,
+        inning
+      ) =>
         total +
         (Number(
           inning.team2
@@ -1260,17 +2064,26 @@ function BaseballBoxScore({
   return (
     <div
       style={{
-        marginTop: "22px",
-        paddingTop: "18px",
+        marginTop:
+          "22px",
+
+        paddingTop:
+          "18px",
+
         borderTop:
           "1px solid #30363d",
-        overflowX: "auto",
+
+        overflowX:
+          "auto",
       }}
     >
       <h3
         style={{
-          textAlign: "center",
+          textAlign:
+            "center",
+
           marginTop: 0,
+
           color: "white",
         }}
       >
@@ -1280,18 +2093,26 @@ function BaseballBoxScore({
       <table
         style={{
           width: "100%",
+
           borderCollapse:
             "collapse",
-          textAlign: "center",
-          minWidth: "500px",
+
+          textAlign:
+            "center",
+
+          minWidth:
+            "500px",
         }}
       >
         <thead>
           <tr>
             <th
               style={{
-                padding: "8px",
-                color: "#8b949e",
+                padding:
+                  "8px",
+
+                color:
+                  "#8b949e",
               }}
             >
               Team
@@ -1304,6 +2125,7 @@ function BaseballBoxScore({
                   style={{
                     padding:
                       "8px",
+
                     color:
                       "#8b949e",
                   }}
@@ -1317,8 +2139,11 @@ function BaseballBoxScore({
 
             <th
               style={{
-                padding: "8px",
-                color: "#f2cc60",
+                padding:
+                  "8px",
+
+                color:
+                  "#f2cc60",
               }}
             >
               R
@@ -1330,12 +2155,16 @@ function BaseballBoxScore({
           <tr>
             <td
               style={{
-                padding: "8px",
+                padding:
+                  "8px",
+
                 fontWeight:
                   "bold",
               }}
             >
-              {captain1}
+              {
+                captain1
+              }
             </td>
 
             {extras.map(
@@ -1355,9 +2184,12 @@ function BaseballBoxScore({
 
             <td
               style={{
-                padding: "8px",
+                padding:
+                  "8px",
+
                 fontWeight:
                   "bold",
+
                 color:
                   "#f2cc60",
               }}
@@ -1369,12 +2201,16 @@ function BaseballBoxScore({
           <tr>
             <td
               style={{
-                padding: "8px",
+                padding:
+                  "8px",
+
                 fontWeight:
                   "bold",
               }}
             >
-              {captain2}
+              {
+                captain2
+              }
             </td>
 
             {extras.map(
@@ -1394,9 +2230,12 @@ function BaseballBoxScore({
 
             <td
               style={{
-                padding: "8px",
+                padding:
+                  "8px",
+
                 fontWeight:
                   "bold",
+
                 color:
                   "#f2cc60",
               }}
@@ -1413,6 +2252,7 @@ function BaseballBoxScore({
 function EliminationChamberSection({
   extras,
   gameStatus,
+  odds,
 }) {
   const groupNames = [
     "Round 1 - Game 1",
@@ -1424,13 +2264,18 @@ function EliminationChamberSection({
   return (
     <div
       style={{
-        marginBottom: "24px",
+        marginBottom:
+          "24px",
       }}
     >
       <h2
         style={{
-          textAlign: "center",
-          marginBottom: "16px",
+          textAlign:
+            "center",
+
+          marginBottom:
+            "16px",
+
           color: "white",
         }}
       >
@@ -1439,44 +2284,60 @@ function EliminationChamberSection({
 
       {groupNames.map(
         (groupName) => {
-          const group = extras
-            .filter(
-              (item) =>
-                item.type ===
-                groupName
-            )
-            .sort(
-              (a, b) =>
-                Number(a.number) -
-                Number(b.number)
-            );
+          const group =
+            extras
+              .filter(
+                (item) =>
+                  item.type ===
+                  groupName
+              )
+              .sort(
+                (a, b) =>
+                  Number(
+                    a.number
+                  ) -
+                  Number(
+                    b.number
+                  )
+              );
 
           const hasPlayers =
             group.some(
               (item) =>
                 String(
-                  item.team1 || ""
-                ).trim() !== ""
+                  item.team1 ||
+                    ""
+                ).trim() !==
+                ""
             );
 
-          if (!hasPlayers) {
+          if (
+            !hasPlayers
+          ) {
             return null;
           }
 
           return (
             <div
-              key={groupName}
+              key={
+                groupName
+              }
               style={{
                 backgroundColor:
                   "#161b22",
+
                 border:
                   gameStatus.text ===
                   "● LIVE"
                     ? "1px solid #3fb950"
                     : "1px solid #30363d",
+
                 borderRadius:
                   "16px",
-                padding: "18px",
+
+                padding:
+                  "18px",
+
                 marginBottom:
                   "16px",
               }}
@@ -1485,10 +2346,15 @@ function EliminationChamberSection({
                 style={{
                   textAlign:
                     "center",
-                  marginTop: 0,
+
+                  marginTop:
+                    0,
+
                   marginBottom:
                     "14px",
-                  color: "white",
+
+                  color:
+                    "white",
                 }}
               >
                 {getChamberGroupTitle(
@@ -1497,7 +2363,10 @@ function EliminationChamberSection({
               </h3>
 
               {group.map(
-                (item, index) => {
+                (
+                  item,
+                  index
+                ) => {
                   const player =
                     String(
                       item.team1 ||
@@ -1514,22 +2383,37 @@ function EliminationChamberSection({
                     return null;
                   }
 
+                  const playerOdds =
+                    getOutrightOdds(
+                      odds,
+                      player
+                    );
+
                   return (
                     <div
                       key={`${groupName}-${player}-${index}`}
                       style={{
                         display:
-                          "flex",
-                        justifyContent:
-                          "space-between",
+                          "grid",
+
+                        gridTemplateColumns:
+                          "1fr auto",
+
                         alignItems:
                           "center",
+
+                        gap:
+                          "12px",
+
                         backgroundColor:
                           "#21262d",
+
                         borderRadius:
                           "10px",
+
                         padding:
                           "12px 14px",
+
                         marginBottom:
                           index ===
                           group.length -
@@ -1538,9 +2422,20 @@ function EliminationChamberSection({
                             : "8px",
                       }}
                     >
-                      <strong>
-                        {player}
-                      </strong>
+                      <div>
+                        <strong>
+                          {
+                            player
+                          }
+                        </strong>
+
+                        <OddsValue
+                          value={
+                            playerOdds
+                          }
+                          label="TO FINISH 1ST"
+                        />
+                      </div>
 
                       <strong
                         style={{
@@ -1606,26 +2501,36 @@ function PlacementSection({
   placements,
   gameStatus,
   getPlaceLabel,
+  odds,
 }) {
   return (
     <div
       style={{
         backgroundColor:
           "#161b22",
+
         border:
           gameStatus.text ===
           "● LIVE"
             ? "1px solid #3fb950"
             : "1px solid #30363d",
-        borderRadius: "16px",
+
+        borderRadius:
+          "16px",
+
         padding: "18px",
-        marginBottom: "24px",
+
+        marginBottom:
+          "24px",
       }}
     >
       <h2
         style={{
           marginTop: 0,
-          textAlign: "center",
+
+          textAlign:
+            "center",
+
           color: "white",
         }}
       >
@@ -1636,50 +2541,77 @@ function PlacementSection({
         (
           placement,
           index
-        ) => (
-          <div
-            key={`${placement.team}-${index}`}
-            style={{
-              backgroundColor:
-                "#21262d",
-              borderRadius:
-                "14px",
-              padding: "16px",
-              marginBottom:
-                index ===
-                placements.length -
-                  1
-                  ? "0"
-                  : "12px",
-              display: "flex",
-              justifyContent:
-                "space-between",
-              alignItems:
-                "center",
-            }}
-          >
-            <strong>
-              {
-                placement.team
-              }
-            </strong>
+        ) => {
+          const outright =
+            getOutrightOdds(
+              odds,
+              placement.team
+            );
 
-            <strong
+          return (
+            <div
+              key={`${placement.team}-${index}`}
               style={{
-                color:
-                  placement.place
-                    ? "#f2cc60"
-                    : "#8b949e",
+                backgroundColor:
+                  "#21262d",
+
+                borderRadius:
+                  "14px",
+
+                padding:
+                  "16px",
+
+                marginBottom:
+                  index ===
+                  placements.length -
+                    1
+                    ? "0"
+                    : "12px",
+
+                display:
+                  "grid",
+
+                gridTemplateColumns:
+                  "1fr auto",
+
+                gap: "12px",
+
+                alignItems:
+                  "center",
               }}
             >
-              {placement.place
-                ? getPlaceLabel(
+              <div>
+                <strong>
+                  {
+                    placement.team
+                  }
+                </strong>
+
+                <OddsValue
+                  value={
+                    outright
+                  }
+                  label="TO FINISH 1ST"
+                />
+              </div>
+
+              <strong
+                style={{
+                  color:
                     placement.place
-                  )
-                : "—"}
-            </strong>
-          </div>
-        )
+                      ? "#f2cc60"
+                      : "#8b949e",
+                }}
+              >
+                {placement.place
+                  ? getPlaceLabel(
+                      placement.place
+                    )
+                  : "—"}
+              </strong>
+            </div>
+          );
+        }
       )}
     </div>
   );
@@ -1694,20 +2626,30 @@ function RPSSection({
       style={{
         backgroundColor:
           "#161b22",
+
         border:
           gameStatus.text ===
           "● LIVE"
             ? "1px solid #3fb950"
             : "1px solid #30363d",
-        borderRadius: "16px",
-        padding: "18px",
-        marginBottom: "24px",
+
+        borderRadius:
+          "16px",
+
+        padding:
+          "18px",
+
+        marginBottom:
+          "24px",
       }}
     >
       <h2
         style={{
           marginTop: 0,
-          textAlign: "center",
+
+          textAlign:
+            "center",
+
           color: "white",
         }}
       >
@@ -1736,16 +2678,20 @@ function RPSSection({
               .toUpperCase();
 
           const player1Won =
-            result1 === "W";
+            result1 ===
+            "W";
 
           const player2Won =
-            result2 === "W";
+            result2 ===
+            "W";
 
           const player1Lost =
-            result1 === "L";
+            result1 ===
+            "L";
 
           const player2Lost =
-            result2 === "L";
+            result2 ===
+            "L";
 
           return (
             <div
@@ -1753,9 +2699,13 @@ function RPSSection({
               style={{
                 backgroundColor:
                   "#21262d",
+
                 borderRadius:
                   "14px",
-                padding: "16px",
+
+                padding:
+                  "16px",
+
                 marginBottom:
                   index ===
                   matchups.length -
@@ -1768,10 +2718,13 @@ function RPSSection({
                 style={{
                   display:
                     "grid",
+
                   gridTemplateColumns:
                     "1fr 60px 1fr",
+
                   alignItems:
                     "center",
+
                   gap: "8px",
                 }}
               >
@@ -1779,6 +2732,7 @@ function RPSSection({
                   style={{
                     textAlign:
                       "center",
+
                     opacity:
                       player1Lost
                         ? 0.5
@@ -1789,6 +2743,7 @@ function RPSSection({
                     style={{
                       fontSize:
                         "24px",
+
                       minHeight:
                         "30px",
                     }}
@@ -1802,6 +2757,7 @@ function RPSSection({
                     style={{
                       fontSize:
                         "17px",
+
                       color:
                         player1Won
                           ? "#3fb950"
@@ -1818,10 +2774,13 @@ function RPSSection({
                       style={{
                         marginTop:
                           "6px",
+
                         fontSize:
                           "11px",
+
                         fontWeight:
                           "bold",
+
                         color:
                           "#3fb950",
                       }}
@@ -1835,8 +2794,10 @@ function RPSSection({
                   style={{
                     textAlign:
                       "center",
+
                     color:
                       "#8b949e",
+
                     fontWeight:
                       "bold",
                   }}
@@ -1848,6 +2809,7 @@ function RPSSection({
                   style={{
                     textAlign:
                       "center",
+
                     opacity:
                       player2Lost
                         ? 0.5
@@ -1858,6 +2820,7 @@ function RPSSection({
                     style={{
                       fontSize:
                         "24px",
+
                       minHeight:
                         "30px",
                     }}
@@ -1871,6 +2834,7 @@ function RPSSection({
                     style={{
                       fontSize:
                         "17px",
+
                       color:
                         player2Won
                           ? "#3fb950"
@@ -1887,10 +2851,13 @@ function RPSSection({
                       style={{
                         marginTop:
                           "6px",
+
                         fontSize:
                           "11px",
+
                         fontWeight:
                           "bold",
+
                         color:
                           "#3fb950",
                       }}
@@ -1912,26 +2879,36 @@ function MatchupSection({
   matchups,
   gameStatus,
   getStatusDisplay,
+  odds,
 }) {
   return (
     <div
       style={{
         backgroundColor:
           "#161b22",
+
         border:
           gameStatus.text ===
           "● LIVE"
             ? "1px solid #3fb950"
             : "1px solid #30363d",
-        borderRadius: "16px",
+
+        borderRadius:
+          "16px",
+
         padding: "18px",
-        marginBottom: "24px",
+
+        marginBottom:
+          "24px",
       }}
     >
       <h2
         style={{
           marginTop: 0,
-          textAlign: "center",
+
+          textAlign:
+            "center",
+
           color: "white",
         }}
       >
@@ -1960,15 +2937,26 @@ function MatchupSection({
           const team2Won =
             winnerSide === 2;
 
+          const matchupOdds =
+            getMatchupOdds(
+              odds,
+              matchup.team1,
+              matchup.team2
+            );
+
           return (
             <div
               key={`${matchup.team1}-${matchup.team2}-${index}`}
               style={{
                 backgroundColor:
                   "#21262d",
+
                 borderRadius:
                   "14px",
-                padding: "16px",
+
+                padding:
+                  "16px",
+
                 marginBottom:
                   index ===
                   matchups.length -
@@ -1981,10 +2969,13 @@ function MatchupSection({
                 style={{
                   display:
                     "grid",
+
                   gridTemplateColumns:
                     "1fr 70px 1fr",
+
                   alignItems:
                     "stretch",
+
                   gap: "8px",
                 }}
               >
@@ -1992,16 +2983,20 @@ function MatchupSection({
                   style={{
                     textAlign:
                       "center",
+
                     backgroundColor:
                       team1Won
                         ? "rgba(46, 160, 67, 0.14)"
                         : "transparent",
+
                     border:
                       team1Won
                         ? "1px solid #3fb950"
                         : "1px solid transparent",
+
                     borderRadius:
                       "10px",
+
                     padding:
                       "10px 6px",
                   }}
@@ -2019,12 +3014,20 @@ function MatchupSection({
                     }
                   </strong>
 
+                  <OddsValue
+                    value={
+                      matchupOdds.odds1
+                    }
+                  />
+
                   <div
                     style={{
                       fontSize:
                         "28px",
+
                       marginTop:
                         "4px",
+
                       color:
                         team1Won
                           ? "#3fb950"
@@ -2040,10 +3043,13 @@ function MatchupSection({
                       style={{
                         marginTop:
                           "4px",
+
                         color:
                           "#3fb950",
+
                         fontSize:
                           "10px",
+
                         fontWeight:
                           "bold",
                       }}
@@ -2057,9 +3063,13 @@ function MatchupSection({
                   style={{
                     textAlign:
                       "center",
-                    display: "flex",
+
+                    display:
+                      "flex",
+
                     flexDirection:
                       "column",
+
                     justifyContent:
                       "center",
                   }}
@@ -2077,10 +3087,13 @@ function MatchupSection({
                     style={{
                       marginTop:
                         "18px",
+
                       color:
                         status.color,
+
                       fontSize:
                         "12px",
+
                       fontWeight:
                         "bold",
                     }}
@@ -2093,16 +3106,20 @@ function MatchupSection({
                   style={{
                     textAlign:
                       "center",
+
                     backgroundColor:
                       team2Won
                         ? "rgba(46, 160, 67, 0.14)"
                         : "transparent",
+
                     border:
                       team2Won
                         ? "1px solid #3fb950"
                         : "1px solid transparent",
+
                     borderRadius:
                       "10px",
+
                     padding:
                       "10px 6px",
                   }}
@@ -2120,12 +3137,20 @@ function MatchupSection({
                     }
                   </strong>
 
+                  <OddsValue
+                    value={
+                      matchupOdds.odds2
+                    }
+                  />
+
                   <div
                     style={{
                       fontSize:
                         "28px",
+
                       marginTop:
                         "4px",
+
                       color:
                         team2Won
                           ? "#3fb950"
@@ -2141,10 +3166,13 @@ function MatchupSection({
                       style={{
                         marginTop:
                           "4px",
+
                         color:
                           "#3fb950",
+
                         fontSize:
                           "10px",
+
                         fontWeight:
                           "bold",
                       }}
@@ -2168,8 +3196,12 @@ function GameLeaderboard({
   const rankedGameData =
     [...gameData].sort(
       (a, b) =>
-        Number(b.points || 0) -
-        Number(a.points || 0)
+        Number(
+          b.points || 0
+        ) -
+        Number(
+          a.points || 0
+        )
     );
 
   return (
@@ -2182,9 +3214,11 @@ function GameLeaderboard({
         🏆 Game Leaderboard
       </h2>
 
-      {gameData.length === 0 ? (
+      {gameData.length ===
+      0 ? (
         <p>
-          No player data available yet.
+          No player data
+          available yet.
         </p>
       ) : (
         rankedGameData.map(
@@ -2194,31 +3228,44 @@ function GameLeaderboard({
           ) => {
             const playerPoints =
               Number(
-                player.points || 0
+                player.points ||
+                  0
               );
 
             const numericRank =
               1 +
               rankedGameData.filter(
-                (otherPlayer) =>
+                (
+                  otherPlayer
+                ) =>
                   Number(
                     otherPlayer.points ||
                       0
-                  ) > playerPoints
+                  ) >
+                  playerPoints
               ).length;
 
             let rank =
               `#${numericRank}`;
 
-            if (numericRank === 1) {
+            if (
+              numericRank ===
+              1
+            ) {
               rank = "🥇";
             }
 
-            if (numericRank === 2) {
+            if (
+              numericRank ===
+              2
+            ) {
               rank = "🥈";
             }
 
-            if (numericRank === 3) {
+            if (
+              numericRank ===
+              3
+            ) {
               rank = "🥉";
             }
 
@@ -2230,11 +3277,16 @@ function GameLeaderboard({
                 style={{
                   backgroundColor:
                     "#21262d",
+
                   border:
                     "1px solid #30363d",
+
                   borderRadius:
                     "12px",
-                  padding: "16px",
+
+                  padding:
+                    "16px",
+
                   marginBottom:
                     "12px",
                 }}
@@ -2243,10 +3295,13 @@ function GameLeaderboard({
                   style={{
                     display:
                       "flex",
+
                     justifyContent:
                       "space-between",
+
                     alignItems:
                       "center",
+
                     marginBottom:
                       "8px",
                   }}
@@ -2281,10 +3336,13 @@ function GameLeaderboard({
                   style={{
                     display:
                       "flex",
+
                     justifyContent:
                       "space-between",
+
                     color:
                       "#8b949e",
+
                     fontSize:
                       "14px",
                   }}
