@@ -200,179 +200,190 @@ function GameDetails() {
       }
 
       try {
-        const baseResults =
-          await Promise.allSettled([
-            getGameData(gameName),
-            getGameStatuses(),
-          ]);
+        /*
+         * Start EVERY request needed by this game at the
+         * same time. The previous version waited for game
+         * stats/status before it even requested matchups,
+         * placements, captain data, or extras.
+         */
+        const statsPromise =
+          getGameData(gameName)
+            .then((statsData) => {
+              if (!mountedRef.current) {
+                return;
+              }
+
+              updateIfChanged(
+                statsData || [],
+                gameDataSnapshotRef,
+                setGameData
+              );
+            })
+            .catch((statsError) => {
+              console.error(
+                "Game stats load error:",
+                statsError
+              );
+            });
+
+        const statusPromise =
+          getGameStatuses()
+            .then((statusData) => {
+              if (!mountedRef.current) {
+                return;
+              }
+
+              updateIfChanged(
+                statusData || [],
+                statusesSnapshotRef,
+                setLiveStatuses
+              );
+            })
+            .catch((statusError) => {
+              console.error(
+                "Game status load error:",
+                statusError
+              );
+            });
+
+        let primaryPromise;
+
+        if (isEliminationChamber) {
+          primaryPromise =
+            getExtrasForGame(gameName)
+              .then((extrasData) => {
+                if (!mountedRef.current) {
+                  return;
+                }
+
+                updateIfChanged(
+                  extrasData || [],
+                  extrasSnapshotRef,
+                  setExtras
+                );
+              });
+        } else if (isPlacementGame) {
+          primaryPromise =
+            getPlacementsForGame(gameName)
+              .then((placementData) => {
+                if (!mountedRef.current) {
+                  return;
+                }
+
+                updateIfChanged(
+                  placementData || [],
+                  placementsSnapshotRef,
+                  setPlacements
+                );
+              });
+        } else if (isCaptainGame) {
+          const captainPromise =
+            getCaptainGame(gameName)
+              .then((captainData) => {
+                if (!mountedRef.current) {
+                  return;
+                }
+
+                updateIfChanged(
+                  captainData || null,
+                  captainSnapshotRef,
+                  setCaptainGame
+                );
+              });
+
+          const extrasPromise =
+            getExtrasForGame(gameName)
+              .then((extrasData) => {
+                if (!mountedRef.current) {
+                  return;
+                }
+
+                updateIfChanged(
+                  extrasData || [],
+                  extrasSnapshotRef,
+                  setExtras
+                );
+              });
+
+          primaryPromise =
+            Promise.allSettled([
+              captainPromise,
+              extrasPromise,
+            ]).then((results) => {
+              results.forEach(
+                (result, index) => {
+                  if (
+                    result.status ===
+                    "rejected"
+                  ) {
+                    console.error(
+                      index === 0
+                        ? "Captain game load error:"
+                        : "Captain extras load error:",
+                      result.reason
+                    );
+                  }
+                }
+              );
+            });
+        } else {
+          primaryPromise =
+            getMatchupsForGame(gameName)
+              .then((matchupData) => {
+                if (!mountedRef.current) {
+                  return;
+                }
+
+                updateIfChanged(
+                  matchupData || [],
+                  matchupsSnapshotRef,
+                  setMatchups
+                );
+              });
+        }
+
+        /*
+         * The matchup/placement/captain/extras content is
+         * what the user is waiting to see after tapping a
+         * game. Let that control the initial loading screen.
+         * Leaderboard stats and status are allowed to finish
+         * independently instead of blocking the page.
+         */
+        try {
+          await primaryPromise;
+        } catch (primaryError) {
+          console.error(
+            "Primary game data load error:",
+            primaryError
+          );
+
+          if (mountedRef.current) {
+            setError(
+              "Unable to load game matchups."
+            );
+          }
+        } finally {
+          if (
+            mountedRef.current &&
+            showLoading
+          ) {
+            setLoading(false);
+          }
+        }
+
+        /*
+         * Stats and status were already started above, so
+         * waiting here does not create a request waterfall.
+         * This only keeps one refresh cycle from overlapping
+         * another refresh cycle.
+         */
+        await Promise.allSettled([
+          statsPromise,
+          statusPromise,
+        ]);
 
         if (!mountedRef.current) {
           return;
-        }
-
-        const statsResult =
-          baseResults[0];
-
-        const statusResult =
-          baseResults[1];
-
-        if (
-          statsResult.status ===
-          "rejected"
-        ) {
-          throw statsResult.reason;
-        }
-
-        const statsData =
-          statsResult.value || [];
-
-        updateIfChanged(
-          statsData,
-          gameDataSnapshotRef,
-          setGameData
-        );
-
-        if (
-          statusResult.status ===
-          "fulfilled"
-        ) {
-          updateIfChanged(
-            statusResult.value || [],
-            statusesSnapshotRef,
-            setLiveStatuses
-          );
-        } else {
-          console.error(
-            "Game status load error:",
-            statusResult.reason
-          );
-        }
-
-        if (isEliminationChamber) {
-          const extrasResult =
-            await Promise.allSettled([
-              getExtrasForGame(
-                gameName
-              ),
-            ]);
-
-          if (!mountedRef.current) {
-            return;
-          }
-
-          if (
-            extrasResult[0].status ===
-            "fulfilled"
-          ) {
-            updateIfChanged(
-              extrasResult[0].value || [],
-              extrasSnapshotRef,
-              setExtras
-            );
-          } else {
-            console.error(
-              "Game extras load error:",
-              extrasResult[0].reason
-            );
-          }
-        } else if (isPlacementGame) {
-          const placementResult =
-            await Promise.allSettled([
-              getPlacementsForGame(
-                gameName
-              ),
-            ]);
-
-          if (!mountedRef.current) {
-            return;
-          }
-
-          if (
-            placementResult[0].status ===
-            "fulfilled"
-          ) {
-            updateIfChanged(
-              placementResult[0].value || [],
-              placementsSnapshotRef,
-              setPlacements
-            );
-          } else {
-            console.error(
-              "Placement load error:",
-              placementResult[0].reason
-            );
-          }
-        } else if (isCaptainGame) {
-          const captainResults =
-            await Promise.allSettled([
-              getCaptainGame(gameName),
-              getExtrasForGame(
-                gameName
-              ),
-            ]);
-
-          if (!mountedRef.current) {
-            return;
-          }
-
-          if (
-            captainResults[0].status ===
-            "fulfilled"
-          ) {
-            updateIfChanged(
-              captainResults[0].value || null,
-              captainSnapshotRef,
-              setCaptainGame
-            );
-          } else {
-            console.error(
-              "Captain game load error:",
-              captainResults[0].reason
-            );
-          }
-
-          if (
-            captainResults[1].status ===
-            "fulfilled"
-          ) {
-            updateIfChanged(
-              captainResults[1].value || [],
-              extrasSnapshotRef,
-              setExtras
-            );
-          } else {
-            console.error(
-              "Captain extras load error:",
-              captainResults[1].reason
-            );
-          }
-        } else {
-          const matchupResult =
-            await Promise.allSettled([
-              getMatchupsForGame(
-                gameName
-              ),
-            ]);
-
-          if (!mountedRef.current) {
-            return;
-          }
-
-          if (
-            matchupResult[0].status ===
-            "fulfilled"
-          ) {
-            updateIfChanged(
-              matchupResult[0].value || [],
-              matchupsSnapshotRef,
-              setMatchups
-            );
-          } else {
-            console.error(
-              "Matchup load error:",
-              matchupResult[0].reason
-            );
-          }
         }
 
         setLastUpdated(
@@ -443,12 +454,16 @@ function GameDetails() {
         return;
       }
 
-      await Promise.all([
-        loadOddsOnce(),
-        loadGame({
-          showLoading: true,
-        }),
-      ]);
+      /*
+       * Odds are static and cached for the app session.
+       * Kick them off immediately, but do not make the
+       * matchup screen wait for them.
+       */
+      loadOddsOnce();
+
+      await loadGame({
+        showLoading: true,
+      });
 
       if (!mountedRef.current) {
         return;
