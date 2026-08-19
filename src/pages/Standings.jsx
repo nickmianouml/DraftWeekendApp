@@ -5,10 +5,21 @@ import {
 } from "react";
 import { Link } from "react-router-dom";
 
-import { getPlayers } from "../services/players";
-import { getLiveData } from "../services/live";
-import { getAllPlayerRecords } from "../services/playerRecord";
-import { getCurrentGameMatchups } from "../services/currentGame";
+import {
+  getPlayers,
+} from "../services/players";
+
+import {
+  getLiveData,
+} from "../services/live";
+
+import {
+  getAllPlayerRecords,
+} from "../services/playerRecord";
+
+import {
+  getCurrentGameMatchups,
+} from "../services/currentGame";
 
 import {
   formatAmericanOdds,
@@ -23,7 +34,17 @@ import {
 
 import "../styles/standingsPage.css";
 
-const REFRESH_INTERVAL = 30000;
+const REFRESH_INTERVAL =
+  30000;
+
+const CRITICAL_TIMEOUT =
+  8000;
+
+const SECONDARY_TIMEOUT =
+  10000;
+
+const RETRY_DELAY =
+  1000;
 
 const PLAYERS_CACHE_KEY =
   "standings-players";
@@ -53,8 +74,12 @@ const UPSET_EXCLUDED_GAMES = [
   "Thunderchug",
 ];
 
-function sortStandings(players) {
-  return [...(players || [])].sort(
+function sortStandings(
+  players
+) {
+  return [
+    ...(players || []),
+  ].sort(
     (a, b) => {
       if (
         a.standings !==
@@ -78,16 +103,21 @@ function sortStandings(players) {
   );
 }
 
+function wait(milliseconds) {
+  return new Promise(
+    (resolve) => {
+      setTimeout(
+        resolve,
+        milliseconds
+      );
+    }
+  );
+}
+
 function Standings() {
   /*
-   * IMPORTANT:
-   *
-   * Read each API cache independently.
-   *
-   * We no longer maintain one giant
-   * "Standings View" object that requires
-   * every API to succeed before the page
-   * can exist.
+   * Restore anything we already have
+   * immediately.
    */
   const initialPlayers =
     getCachedValue(
@@ -123,10 +153,12 @@ function Standings() {
     )
   );
 
-  const [live, setLive] =
-    useState(
-      initialLive
-    );
+  const [
+    live,
+    setLive,
+  ] = useState(
+    initialLive
+  );
 
   const [
     records,
@@ -138,17 +170,17 @@ function Standings() {
   const [
     largestUpset,
     setLargestUpset,
-  ] = useState(() =>
-    findLargestUpset(
-      initialMatchups,
-      initialOdds
-    )
+  ] = useState(
+    () =>
+      findLargestUpset(
+        initialMatchups,
+        initialOdds
+      )
   );
 
   /*
-   * The ONLY thing that controls the
-   * main loading screen is whether we
-   * already have player standings.
+   * Only absence of Players data may
+   * produce the full-page loading screen.
    */
   const [
     loading,
@@ -158,13 +190,20 @@ function Standings() {
       0
   );
 
-  const [error, setError] =
-    useState("");
+  const [
+    error,
+    setError,
+  ] = useState("");
 
   const [
     lastUpdated,
     setLastUpdated,
-  ] = useState(null);
+  ] = useState(
+    initialPlayers.length >
+      0
+      ? new Date()
+      : null
+  );
 
   const mountedRef =
     useRef(true);
@@ -187,14 +226,13 @@ function Standings() {
   const oddsRequestRef =
     useRef(false);
 
-  /*
-   * Keep the latest matchup and odds
-   * datasets in refs.
-   *
-   * This lets either API finish first.
-   * Whichever finishes second immediately
-   * recalculates Largest Upset.
-   */
+  const standingsRef =
+    useRef(
+      sortStandings(
+        initialPlayers
+      )
+    );
+
   const matchupsRef =
     useRef(
       initialMatchups
@@ -204,6 +242,11 @@ function Standings() {
     useRef(
       initialOdds
     );
+
+  useEffect(() => {
+    standingsRef.current =
+      standings;
+  }, [standings]);
 
   useEffect(() => {
     mountedRef.current =
@@ -225,22 +268,21 @@ function Standings() {
     }
 
     /*
-     * --------------------------------
-     * CRITICAL DATA
-     * --------------------------------
+     * ======================================
+     * CRITICAL REQUEST: PLAYERS / STANDINGS
+     * ======================================
      *
-     * This controls whether the user
-     * can actually see the Standings
-     * page.
+     * Nothing else is allowed to block this.
      */
     async function loadPlayers({
-      force = false,
       showLoading = false,
+      force = false,
+      retry = true,
     } = {}) {
       if (
         playersRequestRef.current
       ) {
-        return;
+        return false;
       }
 
       playersRequestRef.current =
@@ -253,22 +295,85 @@ function Standings() {
         setLoading(true);
       }
 
+      let success = false;
+
       try {
-        const playersData =
-          await getCachedData(
-            PLAYERS_CACHE_KEY,
-            getPlayers,
-            {
-              ttl:
-                REFRESH_INTERVAL,
-              force,
-            }
+        /*
+         * Try once.
+         */
+        let playersData;
+
+        try {
+          playersData =
+            await getCachedData(
+              PLAYERS_CACHE_KEY,
+              getPlayers,
+              {
+                ttl:
+                  REFRESH_INTERVAL,
+                force,
+                timeout:
+                  CRITICAL_TIMEOUT,
+              }
+            );
+        } catch (
+          firstError
+        ) {
+          console.error(
+            "Initial standings request failed:",
+            firstError
           );
+
+          if (
+            !retry ||
+            !mountedRef.current
+          ) {
+            throw firstError;
+          }
+
+          /*
+           * Give the network a moment to recover.
+           */
+          await wait(
+            RETRY_DELAY
+          );
+
+          if (
+            !mountedRef.current
+          ) {
+            return false;
+          }
+
+          console.log(
+            "Retrying standings request..."
+          );
+
+          /*
+           * The timed-out cache request has
+           * already removed itself from
+           * inFlight.
+           *
+           * force=true ensures the retry is
+           * genuinely allowed to fetch again.
+           */
+          playersData =
+            await getCachedData(
+              PLAYERS_CACHE_KEY,
+              getPlayers,
+              {
+                ttl:
+                  REFRESH_INTERVAL,
+                force: true,
+                timeout:
+                  CRITICAL_TIMEOUT,
+              }
+            );
+        }
 
         if (
           !mountedRef.current
         ) {
-          return;
+          return false;
         }
 
         const sorted =
@@ -276,27 +381,28 @@ function Standings() {
             playersData
           );
 
+        standingsRef.current =
+          sorted;
+
         setStandings(
           sorted
         );
 
         /*
-         * As soon as Players returns,
-         * REMOVE THE LOADING SCREEN.
-         *
-         * We do NOT wait for:
-         * - Live
-         * - Records
-         * - Current Game
-         * - Odds
+         * The moment Players succeeds,
+         * the main page becomes visible.
          */
         setLoading(false);
+
+        setError("");
 
         setLastUpdated(
           new Date()
         );
 
-        setError("");
+        success = true;
+
+        return true;
       } catch (err) {
         console.error(
           "Standings player data error:",
@@ -304,45 +410,54 @@ function Standings() {
         );
 
         if (
-          mountedRef.current
+          !mountedRef.current
         ) {
-          /*
-           * Only show a fatal error if
-           * we truly have no standings
-           * to display.
-           */
-          if (
-            standings.length ===
-            0
-          ) {
-            setError(
-              "Unable to load the live standings."
-            );
-
-            setLoading(
-              false
-            );
-          }
+          return false;
         }
+
+        /*
+         * If we have old standings, NEVER
+         * remove them just because a refresh
+         * failed.
+         */
+        if (
+          standingsRef.current
+            .length > 0
+        ) {
+          setLoading(false);
+
+          return false;
+        }
+
+        setLoading(false);
+
+        setError(
+          "Unable to load the live standings. Retrying automatically..."
+        );
+
+        return false;
       } finally {
         playersRequestRef.current =
           false;
+
+        /*
+         * success variable intentionally
+         * exists for easier console debugging.
+         */
+        if (success) {
+          console.log(
+            "Standings loaded successfully."
+          );
+        }
       }
     }
 
     /*
-     * --------------------------------
-     * LIVE SUMMARY DATA
-     * --------------------------------
-     *
-     * Luckiest, Unluckiest,
-     * Porch Beers, etc.
-     *
-     * Never blocks the standings.
+     * ======================================
+     * SECONDARY: LIVE SUMMARY
+     * ======================================
      */
-    async function loadLive({
-      force = false,
-    } = {}) {
+    async function loadLive() {
       if (
         liveRequestRef.current
       ) {
@@ -353,14 +468,15 @@ function Standings() {
         true;
 
       try {
-        const liveData =
+        const data =
           await getCachedData(
             LIVE_CACHE_KEY,
             getLiveData,
             {
               ttl:
                 REFRESH_INTERVAL,
-              force,
+              timeout:
+                SECONDARY_TIMEOUT,
             }
           );
 
@@ -371,7 +487,7 @@ function Standings() {
         }
 
         setLive(
-          liveData || null
+          data || null
         );
       } catch (err) {
         console.error(
@@ -385,15 +501,11 @@ function Standings() {
     }
 
     /*
-     * --------------------------------
-     * PLAYER W-L RECORDS
-     * --------------------------------
-     *
-     * Completely secondary.
+     * ======================================
+     * SECONDARY: PLAYER RECORDS
+     * ======================================
      */
-    async function loadRecords({
-      force = false,
-    } = {}) {
+    async function loadRecords() {
       if (
         recordsRequestRef.current
       ) {
@@ -404,14 +516,15 @@ function Standings() {
         true;
 
       try {
-        const recordsData =
+        const data =
           await getCachedData(
             RECORDS_CACHE_KEY,
             getAllPlayerRecords,
             {
               ttl:
                 REFRESH_INTERVAL,
-              force,
+              timeout:
+                SECONDARY_TIMEOUT,
             }
           );
 
@@ -422,7 +535,7 @@ function Standings() {
         }
 
         setRecords(
-          recordsData || []
+          data || []
         );
       } catch (err) {
         console.error(
@@ -436,17 +549,11 @@ function Standings() {
     }
 
     /*
-     * --------------------------------
-     * CURRENT MATCHUPS
-     * --------------------------------
-     *
-     * Used only by Largest Upset.
-     *
-     * Never blocks the standings.
+     * ======================================
+     * SECONDARY: CURRENT MATCHUPS
+     * ======================================
      */
-    async function loadMatchups({
-      force = false,
-    } = {}) {
+    async function loadMatchups() {
       if (
         matchupsRequestRef.current
       ) {
@@ -457,14 +564,15 @@ function Standings() {
         true;
 
       try {
-        const matchupData =
+        const data =
           await getCachedData(
             MATCHUPS_CACHE_KEY,
             getCurrentGameMatchups,
             {
               ttl:
                 REFRESH_INTERVAL,
-              force,
+              timeout:
+                SECONDARY_TIMEOUT,
             }
           );
 
@@ -475,7 +583,7 @@ function Standings() {
         }
 
         matchupsRef.current =
-          matchupData || [];
+          data || [];
 
         updateLargestUpset();
       } catch (err) {
@@ -490,16 +598,12 @@ function Standings() {
     }
 
     /*
-     * --------------------------------
-     * ODDS
-     * --------------------------------
+     * ======================================
+     * SECONDARY: ODDS
+     * ======================================
      *
-     * Odds essentially never change,
-     * so cache them for the entire
-     * app session.
-     *
-     * This request NEVER blocks the
-     * actual standings.
+     * Once successful, odds remain cached
+     * for the entire app session.
      */
     async function loadOdds() {
       if (
@@ -508,16 +612,20 @@ function Standings() {
         return;
       }
 
+      const cachedOdds =
+        getCachedValue(
+          ODDS_CACHE_KEY
+        );
+
       if (
+        cachedOdds &&
         isCacheFresh(
           ODDS_CACHE_KEY,
           Infinity
         )
       ) {
         oddsRef.current =
-          getCachedValue(
-            ODDS_CACHE_KEY
-          ) || [];
+          cachedOdds;
 
         updateLargestUpset();
 
@@ -528,13 +636,15 @@ function Standings() {
         true;
 
       try {
-        const oddsData =
+        const data =
           await getCachedData(
             ODDS_CACHE_KEY,
             getOdds,
             {
               ttl:
                 Infinity,
+              timeout:
+                SECONDARY_TIMEOUT,
             }
           );
 
@@ -545,7 +655,7 @@ function Standings() {
         }
 
         oddsRef.current =
-          oddsData || [];
+          data || [];
 
         updateLargestUpset();
       } catch (err) {
@@ -559,29 +669,17 @@ function Standings() {
       }
     }
 
-    /*
-     * --------------------------------
-     * INITIAL LOAD
-     * --------------------------------
-     *
-     * THIS IS THE IMPORTANT CHANGE.
-     *
-     * We start everything at once,
-     * but we DO NOT await everything.
-     */
-    function initialLoad() {
-      /*
-       * Players gets absolute priority.
-       */
-      loadPlayers({
-        showLoading:
-          initialPlayers.length ===
-          0,
-      });
+    function loadSecondaryData() {
+      if (
+        !mountedRef.current
+      ) {
+        return;
+      }
 
       /*
-       * Everything below happens
-       * independently in the background.
+       * These begin together only AFTER
+       * the critical standings request
+       * has had priority.
        */
       loadLive();
 
@@ -593,18 +691,79 @@ function Standings() {
     }
 
     /*
-     * --------------------------------
-     * BACKGROUND REFRESH
-     * --------------------------------
+     * ======================================
+     * INITIAL APP LOAD
+     * ======================================
      */
-    function refreshAllIfNeeded() {
+    async function initialLoad() {
+      /*
+       * If cached standings exist, show
+       * them immediately and don't delay
+       * secondary data.
+       */
+      if (
+        initialPlayers.length >
+        0
+      ) {
+        setLoading(false);
+
+        /*
+         * Refresh Players only if stale.
+         */
+        if (
+          !isCacheFresh(
+            PLAYERS_CACHE_KEY,
+            REFRESH_INTERVAL
+          )
+        ) {
+          loadPlayers();
+        }
+
+        loadSecondaryData();
+
+        return;
+      }
+
+      /*
+       * COLD LAUNCH:
+       *
+       * Players gets the network to itself
+       * first.
+       */
+      await loadPlayers({
+        showLoading: true,
+        retry: true,
+      });
+
+      if (
+        !mountedRef.current
+      ) {
+        return;
+      }
+
+      /*
+       * Only after the critical request
+       * has completed do we start the
+       * secondary APIs.
+       */
+      loadSecondaryData();
+    }
+
+    /*
+     * ======================================
+     * BACKGROUND REFRESH
+     * ======================================
+     */
+    function refreshIfNeeded() {
       if (
         !isCacheFresh(
           PLAYERS_CACHE_KEY,
           REFRESH_INTERVAL
         )
       ) {
-        loadPlayers();
+        loadPlayers({
+          retry: true,
+        });
       }
 
       if (
@@ -635,8 +794,8 @@ function Standings() {
       }
 
       /*
-       * Odds are intentionally NOT
-       * refreshed.
+       * Odds do not need periodic
+       * refreshing.
        */
     }
 
@@ -665,7 +824,7 @@ function Standings() {
 
       intervalRef.current =
         setInterval(
-          refreshAllIfNeeded,
+          refreshIfNeeded,
           REFRESH_INTERVAL
         );
     }
@@ -675,7 +834,7 @@ function Standings() {
         document.visibilityState ===
         "visible"
       ) {
-        refreshAllIfNeeded();
+        refreshIfNeeded();
 
         startPolling();
       } else {
@@ -706,8 +865,9 @@ function Standings() {
   }, []);
 
   /*
-   * Only the Players API can keep
-   * this screen in loading mode.
+   * ======================================
+   * LOADING / ERROR
+   * ======================================
    */
   if (loading) {
     return (
@@ -747,7 +907,9 @@ function Standings() {
           🏆 2026 Standings
         </h1>
 
-        <p>{error}</p>
+        <p>
+          {error}
+        </p>
       </div>
     );
   }
@@ -1452,7 +1614,8 @@ function findLargestUpset(
   matchups,
   odds
 ) {
-  const candidates = [];
+  const candidates =
+    [];
 
   for (
     const matchup of
