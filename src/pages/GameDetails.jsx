@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   useLocation,
   useNavigate,
@@ -105,204 +105,385 @@ function GameDetails() {
     gameName ===
     "Elimination Chamber";
 
-  useEffect(() => {
-    let active = true;
+  const mountedRef = useRef(true);
+  const intervalRef = useRef(null);
+  const requestInFlightRef = useRef(false);
 
-    async function loadGame() {
-      if (!gameName) {
-        setError(
-          "Game not found."
+  const gameDataSnapshotRef = useRef("");
+  const matchupsSnapshotRef = useRef("");
+  const placementsSnapshotRef = useRef("");
+  const captainSnapshotRef = useRef("");
+  const extrasSnapshotRef = useRef("");
+  const statusesSnapshotRef = useRef("");
+
+  const oddsRef = useRef([]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    function updateIfChanged(
+      value,
+      snapshotRef,
+      setter
+    ) {
+      const snapshot =
+        JSON.stringify(value);
+
+      if (
+        snapshot !==
+        snapshotRef.current
+      ) {
+        snapshotRef.current =
+          snapshot;
+
+        setter(value);
+      }
+    }
+
+    async function loadOddsOnce() {
+      try {
+        const oddsData =
+          await getOddsForGame(
+            gameName
+          );
+
+        if (!mountedRef.current) {
+          return;
+        }
+
+        oddsRef.current =
+          oddsData || [];
+
+        setOdds(
+          oddsRef.current
+        );
+      } catch (oddsError) {
+        console.error(
+          "Odds load error:",
+          oddsError
         );
 
-        setLoading(false);
+        oddsRef.current = [];
+
+        if (mountedRef.current) {
+          setOdds([]);
+        }
+      }
+    }
+
+    async function loadGame({
+      showLoading = false,
+    } = {}) {
+      if (!gameName) {
+        if (mountedRef.current) {
+          setError(
+            "Game not found."
+          );
+
+          setLoading(false);
+        }
 
         return;
       }
 
+      if (requestInFlightRef.current) {
+        return;
+      }
+
+      requestInFlightRef.current = true;
+
+      if (
+        showLoading &&
+        mountedRef.current
+      ) {
+        setLoading(true);
+      }
+
       try {
-        setError("");
-
-        /*
-          Odds are intentionally
-          non-critical. If the Odds
-          API has a temporary issue,
-          the game itself still loads.
-        */
-        const [
-          statsData,
-          statusData,
-          oddsData,
-        ] =
-          await Promise.all([
-            getGameData(
-              gameName
-            ),
-
+        const baseResults =
+          await Promise.allSettled([
+            getGameData(gameName),
             getGameStatuses(),
-
-            getOddsForGame(
-              gameName
-            ).catch(
-              (oddsError) => {
-                console.error(
-                  "Odds load error:",
-                  oddsError
-                );
-
-                return [];
-              }
-            ),
           ]);
 
-        if (!active) {
+        if (!mountedRef.current) {
           return;
         }
 
-        setGameData(
-          statsData
-        );
+        const statsResult =
+          baseResults[0];
 
-        setLiveStatuses(
-          statusData
-        );
+        const statusResult =
+          baseResults[1];
 
-        setOdds(
-          oddsData
+        if (
+          statsResult.status ===
+          "rejected"
+        ) {
+          throw statsResult.reason;
+        }
+
+        const statsData =
+          statsResult.value || [];
+
+        updateIfChanged(
+          statsData,
+          gameDataSnapshotRef,
+          setGameData
         );
 
         if (
-          isEliminationChamber
+          statusResult.status ===
+          "fulfilled"
         ) {
-          const extrasData =
-            await getExtrasForGame(
-              gameName
-            );
-
-          if (!active) {
-            return;
-          }
-
-          setExtras(
-            extrasData
+          updateIfChanged(
+            statusResult.value || [],
+            statusesSnapshotRef,
+            setLiveStatuses
           );
-
-          setPlacements([]);
-          setMatchups([]);
-
-          setCaptainGame(
-            null
+        } else {
+          console.error(
+            "Game status load error:",
+            statusResult.reason
           );
-        } else if (
-          isPlacementGame
-        ) {
-          const placementData =
-            await getPlacementsForGame(
-              gameName
-            );
+        }
 
-          if (!active) {
-            return;
-          }
-
-          setPlacements(
-            placementData
-          );
-
-          setMatchups([]);
-
-          setCaptainGame(
-            null
-          );
-
-          setExtras([]);
-        } else if (
-          isCaptainGame
-        ) {
-          const [
-            captainData,
-            extrasData,
-          ] =
-            await Promise.all([
-              getCaptainGame(
-                gameName
-              ),
-
+        if (isEliminationChamber) {
+          const extrasResult =
+            await Promise.allSettled([
               getExtrasForGame(
                 gameName
               ),
             ]);
 
-          if (!active) {
+          if (!mountedRef.current) {
             return;
           }
 
-          setCaptainGame(
-            captainData
-          );
-
-          setExtras(
-            extrasData
-          );
-
-          setMatchups([]);
-          setPlacements([]);
-        } else {
-          const matchupData =
-            await getMatchupsForGame(
-              gameName
+          if (
+            extrasResult[0].status ===
+            "fulfilled"
+          ) {
+            updateIfChanged(
+              extrasResult[0].value || [],
+              extrasSnapshotRef,
+              setExtras
             );
+          } else {
+            console.error(
+              "Game extras load error:",
+              extrasResult[0].reason
+            );
+          }
+        } else if (isPlacementGame) {
+          const placementResult =
+            await Promise.allSettled([
+              getPlacementsForGame(
+                gameName
+              ),
+            ]);
 
-          if (!active) {
+          if (!mountedRef.current) {
             return;
           }
 
-          setMatchups(
-            matchupData
-          );
+          if (
+            placementResult[0].status ===
+            "fulfilled"
+          ) {
+            updateIfChanged(
+              placementResult[0].value || [],
+              placementsSnapshotRef,
+              setPlacements
+            );
+          } else {
+            console.error(
+              "Placement load error:",
+              placementResult[0].reason
+            );
+          }
+        } else if (isCaptainGame) {
+          const captainResults =
+            await Promise.allSettled([
+              getCaptainGame(gameName),
+              getExtrasForGame(
+                gameName
+              ),
+            ]);
 
-          setPlacements([]);
+          if (!mountedRef.current) {
+            return;
+          }
 
-          setCaptainGame(
-            null
-          );
+          if (
+            captainResults[0].status ===
+            "fulfilled"
+          ) {
+            updateIfChanged(
+              captainResults[0].value || null,
+              captainSnapshotRef,
+              setCaptainGame
+            );
+          } else {
+            console.error(
+              "Captain game load error:",
+              captainResults[0].reason
+            );
+          }
 
-          setExtras([]);
+          if (
+            captainResults[1].status ===
+            "fulfilled"
+          ) {
+            updateIfChanged(
+              captainResults[1].value || [],
+              extrasSnapshotRef,
+              setExtras
+            );
+          } else {
+            console.error(
+              "Captain extras load error:",
+              captainResults[1].reason
+            );
+          }
+        } else {
+          const matchupResult =
+            await Promise.allSettled([
+              getMatchupsForGame(
+                gameName
+              ),
+            ]);
+
+          if (!mountedRef.current) {
+            return;
+          }
+
+          if (
+            matchupResult[0].status ===
+            "fulfilled"
+          ) {
+            updateIfChanged(
+              matchupResult[0].value || [],
+              matchupsSnapshotRef,
+              setMatchups
+            );
+          } else {
+            console.error(
+              "Matchup load error:",
+              matchupResult[0].reason
+            );
+          }
         }
 
         setLastUpdated(
           new Date()
         );
+
+        setError("");
       } catch (err) {
         console.error(
           "Game details error:",
           err
         );
 
-        if (active) {
+        if (mountedRef.current) {
           setError(
             "Unable to load game data."
           );
         }
       } finally {
-        if (active) {
+        requestInFlightRef.current =
+          false;
+
+        if (
+          mountedRef.current &&
+          showLoading
+        ) {
           setLoading(false);
         }
       }
     }
 
-    loadGame();
+    function stopPolling() {
+      if (intervalRef.current) {
+        clearInterval(
+          intervalRef.current
+        );
 
-    const interval =
-      setInterval(
-        loadGame,
-        10000
-      );
+        intervalRef.current = null;
+      }
+    }
+
+    function startPolling() {
+      stopPolling();
+
+      if (
+        document.visibilityState !==
+        "visible"
+      ) {
+        return;
+      }
+
+      intervalRef.current =
+        setInterval(
+          () => {
+            loadGame();
+          },
+          30000
+        );
+    }
+
+    async function initialLoad() {
+      if (!gameName) {
+        setError(
+          "Game not found."
+        );
+
+        setLoading(false);
+        return;
+      }
+
+      await Promise.all([
+        loadOddsOnce(),
+        loadGame({
+          showLoading: true,
+        }),
+      ]);
+
+      if (!mountedRef.current) {
+        return;
+      }
+
+      startPolling();
+    }
+
+    function handleVisibilityChange() {
+      if (
+        document.visibilityState ===
+        "visible"
+      ) {
+        loadGame();
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    }
+
+    initialLoad();
+
+    document.addEventListener(
+      "visibilitychange",
+      handleVisibilityChange
+    );
 
     return () => {
-      active = false;
+      mountedRef.current = false;
 
-      clearInterval(
-        interval
+      stopPolling();
+
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibilityChange
       );
     };
   }, [

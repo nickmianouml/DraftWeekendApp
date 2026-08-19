@@ -1,5 +1,26 @@
 import games from "../data/games";
 
+const eliminationChamberMatrix = [
+  ["1st", "1st", "3"],
+  ["1st", "2nd-3rd", "2.5"],
+  ["2nd-3rd", "1st", "2.5"],
+  ["4th and W", "1st", "2.5"],
+  ["4th Lose play in", "1st", "2"],
+  ["2nd-3rd", "2nd-3rd", "2"],
+  ["4th and W", "2nd-3rd", "2"],
+  ["1st", "4th-6th", "2"],
+  ["5th-7th", "1st", "1.5"],
+  ["4th Lose play in", "2nd-3rd", "1.5"],
+  ["2nd-3rd", "4th-6th", "1.5"],
+  ["4th and W", "4th-6th", "1.5"],
+  ["1st", "7th", "1.5"],
+  ["5th-7th", "2nd-3rd", "1"],
+  ["4th Lose play in", "4th-7th", "1"],
+  ["2nd-3rd", "7th", "1"],
+  ["4th and W", "7th", "1"],
+  ["5th-7th", "4th-7th", "0.5"],
+];
+
 const gameRules = [
   {
     name: "Flip Cup",
@@ -121,6 +142,7 @@ const gameRules = [
     name: "Elimination Chamber",
     payouts:
       "GM 1/2 — 1st: 1.5 spins, 2nd-3rd: 1 spin, 4th W/L: 1 spin/.5 spins, 5th-7th: 0 spin\n\nLs — 1st: 1.5 spins, 2nd-3rd: 1 spin, 4th-7th: .5 spin\n\nWs — 1st: 1.5 spins, 2nd-3rd: 1 spin, 4th-6th: .5 spin, 7th: 0 spin\n\nHave all 3 cups remaining = .5 spin",
+    matrix: eliminationChamberMatrix,
     rules:
       "Need to flip cups in order. Hand in pocket. No cups are eliminated if last cups are a tie. Tie if the cup is in the air at the same time, not when it lands.",
   },
@@ -232,11 +254,10 @@ function Rules() {
         }}
       >
         {gameRules.map((gameRule) => {
-          const gameInfo =
-            games.find(
-              (game) =>
-                game.name === gameRule.name
-            );
+          const gameInfo = games.find(
+            (game) =>
+              game.name === gameRule.name
+          );
 
           return (
             <GameRuleCard
@@ -299,7 +320,9 @@ function SpinRule({
             key={section.label}
             style={{
               marginTop:
-                index === 0 ? "4px" : "14px",
+                index === 0
+                  ? "4px"
+                  : "14px",
             }}
           >
             <strong
@@ -328,6 +351,109 @@ function SpinRule({
     </div>
   );
 }
+
+function EliminationChamberMatrix({ rows }) {
+  return (
+    <div
+      style={{
+        borderTop: "1px solid #30363d",
+        paddingTop: "14px",
+        marginTop: "16px",
+        textAlign: "center",
+      }}
+    >
+      <div
+        style={{
+          color: "#f2cc60",
+          fontSize: "12px",
+          fontWeight: "bold",
+          textTransform: "uppercase",
+          letterSpacing: "0.5px",
+          marginBottom: "10px",
+        }}
+      >
+        🏆 Elimination Chamber Spins Matrix
+      </div>
+
+      <div
+        style={{
+          width: "100%",
+          overflowX: "auto",
+          WebkitOverflowScrolling: "touch",
+        }}
+      >
+        <table
+          style={{
+            width: "100%",
+            minWidth: "320px",
+            borderCollapse: "collapse",
+            fontSize: "13px",
+          }}
+        >
+          <thead>
+            <tr>
+              <th style={matrixHeaderStyle}>
+                GM1
+              </th>
+
+              <th style={matrixHeaderStyle}>
+                GM2
+              </th>
+
+              <th style={matrixHeaderStyle}>
+                Spins
+              </th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {rows.map(
+              ([gm1, gm2, spins], index) => (
+                <tr
+                  key={`${gm1}-${gm2}-${spins}-${index}`}
+                >
+                  <td style={matrixCellStyle}>
+                    {gm1}
+                  </td>
+
+                  <td style={matrixCellStyle}>
+                    {gm2}
+                  </td>
+
+                  <td
+                    style={{
+                      ...matrixCellStyle,
+                      color: "#f2cc60",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    {spins}
+                  </td>
+                </tr>
+              )
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+const matrixHeaderStyle = {
+  padding: "9px 6px",
+  color: "#ffffff",
+  backgroundColor: "#21262d",
+  border: "1px solid #30363d",
+  fontWeight: "bold",
+  textAlign: "center",
+};
+
+const matrixCellStyle = {
+  padding: "8px 6px",
+  color: "#c9d1d9",
+  border: "1px solid #30363d",
+  textAlign: "center",
+};
 
 function GameRuleCard({ game }) {
   return (
@@ -364,9 +490,10 @@ function GameRuleCard({ game }) {
       >
         <div
           style={{
-            marginBottom: game.rules
-              ? "16px"
-              : 0,
+            marginBottom:
+              game.rules || game.matrix
+                ? "16px"
+                : 0,
             textAlign: "center",
           }}
         >
@@ -395,11 +522,21 @@ function GameRuleCard({ game }) {
           </div>
         </div>
 
+        {game.matrix && (
+          <EliminationChamberMatrix
+            rows={game.matrix}
+          />
+        )}
+
         {game.rules && (
           <div
             style={{
               borderTop: "1px solid #30363d",
               paddingTop: "14px",
+              marginTop:
+                game.matrix
+                  ? "16px"
+                  : 0,
               textAlign: "center",
             }}
           >

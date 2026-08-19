@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { getPlayers } from "../services/players";
@@ -25,109 +25,333 @@ const UPSET_EXCLUDED_GAMES = [
   "Thunderchug",
 ];
 
+const REFRESH_INTERVAL = 30000;
+
 function Standings() {
   const [standings, setStandings] = useState([]);
   const [live, setLive] = useState(null);
   const [records, setRecords] = useState([]);
-  const [largestUpset, setLargestUpset] =
-    useState(null);
+  const [largestUpset, setLargestUpset] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [lastUpdated, setLastUpdated] =
-    useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
+
+  const oddsRef = useRef([]);
+  const intervalRef = useRef(null);
+  const mountedRef = useRef(true);
+
+  const standingsSnapshotRef = useRef("");
+  const liveSnapshotRef = useRef("");
+  const recordsSnapshotRef = useRef("");
+  const upsetSnapshotRef = useRef("");
 
   useEffect(() => {
-    let active = true;
+    mountedRef.current = true;
 
-    async function loadStandings() {
+    async function loadOddsOnce() {
       try {
-        setError("");
+        const oddsData = await getOdds();
 
-        const [
-          playersData,
-          liveData,
-          recordsData,
-          matchupsResult,
-          oddsResult,
-        ] = await Promise.all([
-          getPlayers(),
-          getLiveData(),
-          getAllPlayerRecords(),
-
-          getCurrentGameMatchups().catch(
-            (matchupError) => {
-              console.error(
-                "Largest upset matchup load error:",
-                matchupError
-              );
-
-              return [];
-            }
-          ),
-
-          getOdds().catch((oddsError) => {
-            console.error(
-              "Largest upset odds load error:",
-              oddsError
-            );
-
-            return [];
-          }),
-        ]);
-
-        if (!active) {
+        if (!mountedRef.current) {
           return;
         }
 
-        const sortedStandings = [
-          ...playersData,
-        ].sort((a, b) => {
-          if (a.standings !== b.standings) {
-            return a.standings - b.standings;
-          }
-
-          return b.points - a.points;
-        });
-
-        const upset = findLargestUpset(
-          matchupsResult,
-          oddsResult
+        oddsRef.current = oddsData || [];
+      } catch (err) {
+        console.error(
+          "Standings odds load error:",
+          err
         );
 
-        setStandings(sortedStandings);
-        setLive(liveData);
-        setRecords(recordsData);
-        setLargestUpset(upset);
-        setLastUpdated(new Date());
+        oddsRef.current = [];
+      }
+    }
+
+    async function loadStandings({
+      showLoading = false,
+    } = {}) {
+      if (showLoading) {
+        setLoading(true);
+      }
+
+      try {
+        const [
+          playersResult,
+          liveResult,
+          recordsResult,
+          matchupsResult,
+        ] = await Promise.allSettled([
+          getPlayers(),
+          getLiveData(),
+          getAllPlayerRecords(),
+          getCurrentGameMatchups(),
+        ]);
+
+        if (!mountedRef.current) {
+          return;
+        }
+
+        if (
+          playersResult.status ===
+          "rejected"
+        ) {
+          throw playersResult.reason;
+        }
+
+        const playersData =
+          playersResult.value || [];
+
+        const liveData =
+          liveResult.status ===
+          "fulfilled"
+            ? liveResult.value
+            : null;
+
+        const recordsData =
+          recordsResult.status ===
+          "fulfilled"
+            ? recordsResult.value
+            : [];
+
+        const matchupData =
+          matchupsResult.status ===
+          "fulfilled"
+            ? matchupsResult.value
+            : [];
+
+        if (
+          liveResult.status ===
+          "rejected"
+        ) {
+          console.error(
+            "Standings live data error:",
+            liveResult.reason
+          );
+        }
+
+        if (
+          recordsResult.status ===
+          "rejected"
+        ) {
+          console.error(
+            "Standings record data error:",
+            recordsResult.reason
+          );
+        }
+
+        if (
+          matchupsResult.status ===
+          "rejected"
+        ) {
+          console.error(
+            "Standings matchup data error:",
+            matchupsResult.reason
+          );
+        }
+
+        const sortedStandings =
+          [...playersData].sort(
+            (a, b) => {
+              if (
+                a.standings !==
+                b.standings
+              ) {
+                return (
+                  a.standings -
+                  b.standings
+                );
+              }
+
+              return (
+                Number(
+                  b.points || 0
+                ) -
+                Number(
+                  a.points || 0
+                )
+              );
+            }
+          );
+
+        const upset =
+          findLargestUpset(
+            matchupData,
+            oddsRef.current
+          );
+
+        const newStandingsSnapshot =
+          JSON.stringify(
+            sortedStandings
+          );
+
+        if (
+          newStandingsSnapshot !==
+          standingsSnapshotRef.current
+        ) {
+          standingsSnapshotRef.current =
+            newStandingsSnapshot;
+
+          setStandings(
+            sortedStandings
+          );
+        }
+
+        const newLiveSnapshot =
+          JSON.stringify(
+            liveData
+          );
+
+        if (
+          newLiveSnapshot !==
+          liveSnapshotRef.current
+        ) {
+          liveSnapshotRef.current =
+            newLiveSnapshot;
+
+          setLive(liveData);
+        }
+
+        const newRecordsSnapshot =
+          JSON.stringify(
+            recordsData
+          );
+
+        if (
+          newRecordsSnapshot !==
+          recordsSnapshotRef.current
+        ) {
+          recordsSnapshotRef.current =
+            newRecordsSnapshot;
+
+          setRecords(
+            recordsData
+          );
+        }
+
+        const newUpsetSnapshot =
+          JSON.stringify(
+            upset
+          );
+
+        if (
+          newUpsetSnapshot !==
+          upsetSnapshotRef.current
+        ) {
+          upsetSnapshotRef.current =
+            newUpsetSnapshot;
+
+          setLargestUpset(
+            upset
+          );
+        }
+
+        setLastUpdated(
+          new Date()
+        );
+
+        setError("");
       } catch (err) {
         console.error(
           "Standings page error:",
           err
         );
 
-        if (active) {
+        if (
+          mountedRef.current
+        ) {
           setError(
             "Unable to load the live standings."
           );
         }
       } finally {
-        if (active) {
+        if (
+          mountedRef.current &&
+          showLoading
+        ) {
           setLoading(false);
         }
       }
     }
 
-    loadStandings();
+    function stopPolling() {
+      if (
+        intervalRef.current
+      ) {
+        clearInterval(
+          intervalRef.current
+        );
 
-    const interval = setInterval(
-      loadStandings,
-      10000
+        intervalRef.current =
+          null;
+      }
+    }
+
+    function startPolling() {
+      stopPolling();
+
+      if (
+        document.visibilityState !==
+        "visible"
+      ) {
+        return;
+      }
+
+      intervalRef.current =
+        setInterval(
+          () => {
+            loadStandings();
+          },
+          REFRESH_INTERVAL
+        );
+    }
+
+    async function initialLoad() {
+      await loadOddsOnce();
+
+      if (!mountedRef.current) {
+        return;
+      }
+
+      await loadStandings({
+        showLoading: true,
+      });
+
+      if (!mountedRef.current) {
+        return;
+      }
+
+      startPolling();
+    }
+
+    function handleVisibilityChange() {
+      if (
+        document.visibilityState ===
+        "visible"
+      ) {
+        loadStandings();
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    }
+
+    initialLoad();
+
+    document.addEventListener(
+      "visibilitychange",
+      handleVisibilityChange
     );
 
     return () => {
-      active = false;
-      clearInterval(interval);
+      mountedRef.current = false;
+
+      stopPolling();
+
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibilityChange
+      );
     };
   }, []);
 
@@ -168,8 +392,11 @@ function Standings() {
   const firstPlacePoints =
     standings.length > 0
       ? Math.max(
-          ...standings.map((player) =>
-            Number(player.points || 0)
+          ...standings.map(
+            (player) =>
+              Number(
+                player.points || 0
+              )
           )
         )
       : 0;
@@ -228,7 +455,9 @@ function Standings() {
           )}
           showPPS
           detail={
-            live?.["Hottest Player"] || ""
+            live?.[
+              "Hottest Player"
+            ] || ""
           }
         />
 
@@ -244,8 +473,9 @@ function Standings() {
           )}
           showPPS
           detail={
-            live?.["Unluckiest Player"] ||
-            ""
+            live?.[
+              "Unluckiest Player"
+            ] || ""
           }
         />
 
@@ -253,8 +483,9 @@ function Standings() {
           icon="🍺"
           label="Total Porch Beers"
           value={
-            live?.["Total Porch Beers"] ||
-            "0"
+            live?.[
+              "Total Porch Beers"
+            ] || "0"
           }
           detail="Spun"
         />
@@ -272,7 +503,8 @@ function Standings() {
                 0,
                 firstPlacePoints -
                   Number(
-                    player.points || 0
+                    player.points ||
+                      0
                   )
               );
 
@@ -284,7 +516,9 @@ function Standings() {
 
             return (
               <Link
-                key={player.player}
+                key={
+                  player.player
+                }
                 to={`/players/${encodeURIComponent(
                   player.player
                 )}`}
@@ -299,13 +533,16 @@ function Standings() {
                 >
                   <div className="standing-main">
                     <div className="standing-rank">
-                      {getRankDisplay(rank)}
+                      {getRankDisplay(
+                        rank
+                      )}
                     </div>
 
                     <div
                       className="standing-player"
                       style={{
-                        display: "flex",
+                        display:
+                          "flex",
                         flexDirection:
                           "column",
                         alignItems:
@@ -316,17 +553,23 @@ function Standings() {
                     >
                       <strong
                         style={{
-                          color: "#ffffff",
-                          fontSize: "20px",
+                          color:
+                            "#ffffff",
+                          fontSize:
+                            "20px",
                         }}
                       >
-                        {player.player}
+                        {
+                          player.player
+                        }
                       </strong>
 
                       <div
                         style={{
-                          marginTop: "5px",
-                          display: "flex",
+                          marginTop:
+                            "5px",
+                          display:
+                            "flex",
                           alignItems:
                             "baseline",
                           justifyContent:
@@ -340,7 +583,8 @@ function Standings() {
                               "#f2cc60",
                             fontSize:
                               "22px",
-                            lineHeight: 1,
+                            lineHeight:
+                              1,
                           }}
                         >
                           {Number(
@@ -367,22 +611,34 @@ function Standings() {
 
                       <div
                         style={{
-                          marginTop: "7px",
-                          color: "#8b949e",
-                          fontSize: "11px",
-                          fontWeight: "bold",
-                          textAlign: "center",
+                          marginTop:
+                            "7px",
+                          color:
+                            "#8b949e",
+                          fontSize:
+                            "11px",
+                          fontWeight:
+                            "bold",
+                          textAlign:
+                            "center",
                         }}
                       >
-                        {record.wins}-
-                        {record.losses}
+                        {
+                          record.wins
+                        }
+                        -
+                        {
+                          record.losses
+                        }
                         {" · "}
                         {formatWinPct(
                           record.winPct
                         )}
                         {" · "}
                         Win Rank #
-                        {record.winRank}
+                        {
+                          record.winRank
+                        }
                       </div>
                     </div>
 
@@ -393,7 +649,8 @@ function Standings() {
 
                   <div
                     style={{
-                      display: "grid",
+                      display:
+                        "grid",
                       gridTemplateColumns:
                         "repeat(3, 1fr)",
                       borderTop:
@@ -403,7 +660,8 @@ function Standings() {
                     <PlayerStat
                       label="Spins"
                       value={
-                        player.spins || 0
+                        player.spins ||
+                        0
                       }
                       borderRight
                       borderBottom
@@ -438,14 +696,17 @@ function Standings() {
 
                     <PlayerStat
                       label="Points Behind 1st"
-                      value={pointsBehind}
+                      value={
+                        pointsBehind
+                      }
                       borderRight
                     />
 
                     <PlayerStat
                       label="100s"
                       value={
-                        player.hundreds || 0
+                        player.hundreds ||
+                        0
                       }
                     />
                   </div>
@@ -459,7 +720,9 @@ function Standings() {
   );
 }
 
-function UpsetTile({ upset }) {
+function UpsetTile({
+  upset,
+}) {
   if (!upset) {
     return (
       <div className="standings-summary-tile">
@@ -484,32 +747,34 @@ function UpsetTile({ upset }) {
         😱 Largest Upset
       </span>
 
-      <strong
-        className="summary-value"
-        style={{
-          color: "#58a6ff",
-        }}
-      >
-        {formatAmericanOdds(
-          upset.odds
-        )}
-      </strong>
-
       <div
         style={{
-          marginTop: "4px",
+          marginTop: "6px",
           textAlign: "center",
           lineHeight: 1.2,
         }}
       >
-        <div
-          style={{
-            color: "#3fb950",
-            fontWeight: "bold",
-            fontSize: "13px",
-          }}
-        >
-          {upset.winner}
+        <div>
+          <strong
+            style={{
+              color: "#58a6ff",
+              fontSize: "21px",
+              marginRight: "6px",
+            }}
+          >
+            {formatAmericanOdds(
+              upset.odds
+            )}
+          </strong>
+
+          <strong
+            style={{
+              color: "#3fb950",
+              fontSize: "13px",
+            }}
+          >
+            {upset.winner}
+          </strong>
         </div>
 
         <div
@@ -517,21 +782,35 @@ function UpsetTile({ upset }) {
             color: "#8b949e",
             fontSize: "10px",
             fontWeight: "bold",
-            margin: "2px 0",
-            textTransform: "uppercase",
+            margin: "3px 0",
+            textTransform:
+              "uppercase",
           }}
         >
           vs
         </div>
 
-        <div
-          style={{
-            color: "#ffffff",
-            fontWeight: "bold",
-            fontSize: "13px",
-          }}
-        >
-          {upset.loser}
+        <div>
+          <strong
+            style={{
+              color: "#58a6ff",
+              fontSize: "14px",
+              marginRight: "6px",
+            }}
+          >
+            {formatAmericanOdds(
+              upset.losingOdds
+            )}
+          </strong>
+
+          <strong
+            style={{
+              color: "#ffffff",
+              fontSize: "13px",
+            }}
+          >
+            {upset.loser}
+          </strong>
         </div>
 
         <div
@@ -556,46 +835,76 @@ function SummaryTile({
   detail,
 }) {
   return (
-    <div className="standings-summary-tile">
-      <span className="summary-label">
+    <div
+      className="standings-summary-tile"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <span
+        className="summary-label"
+        style={{
+          marginBottom: "7px",
+        }}
+      >
         {icon} {label}
       </span>
 
       {showPPS ? (
         <div
           style={{
-            position: "relative",
-            width: "100%",
-            textAlign: "center",
+            display: "flex",
+            alignItems: "baseline",
+            justifyContent: "center",
+            gap: "8px",
           }}
         >
-          <strong className="summary-value">
+          <strong
+            className="summary-value"
+            style={{
+              fontSize: "30px",
+              lineHeight: 1,
+            }}
+          >
             {value}
           </strong>
 
           <span
             style={{
-              position: "absolute",
-              left: "calc(50% + 48px)",
-              top: "50%",
-              transform:
-                "translateY(-50%)",
               color: "#8b949e",
-              fontSize: "11px",
+              fontSize: "12px",
               fontWeight: "bold",
-              whiteSpace: "nowrap",
+              textTransform:
+                "uppercase",
             }}
           >
             PPS
           </span>
         </div>
       ) : (
-        <strong className="summary-value">
+        <strong
+          className="summary-value"
+          style={{
+            fontSize: "30px",
+            lineHeight: 1,
+          }}
+        >
           {value}
         </strong>
       )}
 
-      <span className="summary-detail">
+      <span
+        className="summary-detail"
+        style={{
+          fontSize: "14px",
+          fontWeight: "bold",
+          marginTop: "9px",
+          lineHeight: 1.1,
+        }}
+      >
         {detail}
       </span>
     </div>
@@ -613,12 +922,14 @@ function PlayerStat({
       style={{
         padding: "16px 8px",
         textAlign: "center",
-        borderRight: borderRight
-          ? "1px solid #30363d"
-          : "none",
-        borderBottom: borderBottom
-          ? "1px solid #30363d"
-          : "none",
+        borderRight:
+          borderRight
+            ? "1px solid #30363d"
+            : "none",
+        borderBottom:
+          borderBottom
+            ? "1px solid #30363d"
+            : "none",
       }}
     >
       <span
@@ -645,20 +956,26 @@ function PlayerStat({
   );
 }
 
-function normalizeName(value) {
+function normalizeName(
+  value
+) {
   return String(value || "")
     .trim()
     .toLowerCase()
     .replace(/\s+/g, " ");
 }
 
-function normalizeGameName(value) {
+function normalizeGameName(
+  value
+) {
   return String(value || "")
     .trim()
     .toLowerCase();
 }
 
-function normalizeTeam(value) {
+function normalizeTeam(
+  value
+) {
   return String(value || "")
     .split(
       /\s*\/\s*|\s*,\s*|\s*&\s*/
@@ -673,7 +990,9 @@ function isUpsetEligibleGame(
   gameName
 ) {
   const normalizedGame =
-    normalizeGameName(gameName);
+    normalizeGameName(
+      gameName
+    );
 
   return !UPSET_EXCLUDED_GAMES.some(
     (excludedGame) =>
@@ -689,7 +1008,10 @@ function findLargestUpset(
 ) {
   const candidates = [];
 
-  for (const matchup of matchups || []) {
+  for (
+    const matchup of
+    matchups || []
+  ) {
     if (
       !isUpsetEligibleGame(
         matchup.game
@@ -814,8 +1136,10 @@ function findOddsForMatchup(
 
   if (direct) {
     return {
-      odds1: direct.odds1,
-      odds2: direct.odds2,
+      odds1:
+        direct.odds1,
+      odds2:
+        direct.odds2,
     };
   }
 
@@ -832,8 +1156,10 @@ function findOddsForMatchup(
 
   if (reversed) {
     return {
-      odds1: reversed.odds2,
-      odds2: reversed.odds1,
+      odds1:
+        reversed.odds2,
+      odds2:
+        reversed.odds1,
     };
   }
 
@@ -845,10 +1171,14 @@ function getMatchupWinnerSide(
   score2
 ) {
   const raw1 =
-    String(score1 ?? "").trim();
+    String(
+      score1 ?? ""
+    ).trim();
 
   const raw2 =
-    String(score2 ?? "").trim();
+    String(
+      score2 ?? ""
+    ).trim();
 
   if (!raw1 || !raw2) {
     return null;
@@ -860,11 +1190,15 @@ function getMatchupWinnerSide(
   const result2 =
     raw2.toUpperCase();
 
-  if (result1 === "W") {
+  if (
+    result1 === "W"
+  ) {
     return 1;
   }
 
-  if (result2 === "W") {
+  if (
+    result2 === "W"
+  ) {
     return 2;
   }
 
@@ -889,21 +1223,30 @@ function getMatchupWinnerSide(
     Number(raw2);
 
   if (
-    Number.isNaN(number1) ||
-    Number.isNaN(number2) ||
+    Number.isNaN(
+      number1
+    ) ||
+    Number.isNaN(
+      number2
+    ) ||
     number1 === number2
   ) {
     return null;
   }
 
-  return number1 > number2
+  return number1 >
+    number2
     ? 1
     : 2;
 }
 
-function parseAmericanOdds(value) {
+function parseAmericanOdds(
+  value
+) {
   const raw =
-    String(value ?? "")
+    String(
+      value ?? ""
+    )
       .trim()
       .replace(/,/g, "");
 
@@ -914,7 +1257,11 @@ function parseAmericanOdds(value) {
   const number =
     Number(raw);
 
-  if (Number.isNaN(number)) {
+  if (
+    Number.isNaN(
+      number
+    )
+  ) {
     return null;
   }
 
@@ -943,7 +1290,9 @@ function findPlayerRecord(
   );
 }
 
-function getRankDisplay(rank) {
+function getRankDisplay(
+  rank
+) {
   if (rank === 1) {
     return "🥇";
   }
@@ -959,34 +1308,63 @@ function getRankDisplay(rank) {
   return `#${rank}`;
 }
 
-function formatStat(value) {
-  const number = Number(value);
+function formatStat(
+  value
+) {
+  const number =
+    Number(value);
 
-  if (Number.isNaN(number)) {
+  if (
+    Number.isNaN(
+      number
+    )
+  ) {
     return "0.000";
   }
 
-  return number.toFixed(3);
+  return number.toFixed(
+    3
+  );
 }
 
-function formatPPS(value) {
-  const number = Number(value);
+function formatPPS(
+  value
+) {
+  const number =
+    Number(value);
 
-  if (Number.isNaN(number)) {
+  if (
+    Number.isNaN(
+      number
+    )
+  ) {
     return "0";
   }
 
-  if (Number.isInteger(number)) {
+  if (
+    Number.isInteger(
+      number
+    )
+  ) {
     return number.toString();
   }
 
-  return number.toFixed(3);
+  return number.toFixed(
+    3
+  );
 }
 
-function formatWinPct(value) {
-  const number = Number(value);
+function formatWinPct(
+  value
+) {
+  const number =
+    Number(value);
 
-  if (Number.isNaN(number)) {
+  if (
+    Number.isNaN(
+      number
+    )
+  ) {
     return "0.0%";
   }
 
