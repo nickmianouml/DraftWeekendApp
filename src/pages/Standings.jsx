@@ -40,9 +40,6 @@ const MATCHUPS_CACHE_KEY =
 const ODDS_CACHE_KEY =
   "odds";
 
-const STANDINGS_VIEW_CACHE_KEY =
-  "standings-view";
-
 const UPSET_EXCLUDED_GAMES = [
   "Flip Cup",
   "Baseball",
@@ -56,50 +53,110 @@ const UPSET_EXCLUDED_GAMES = [
   "Thunderchug",
 ];
 
-function getSavedView() {
-  return getCachedValue(
-    STANDINGS_VIEW_CACHE_KEY
+function sortStandings(players) {
+  return [...(players || [])].sort(
+    (a, b) => {
+      if (
+        a.standings !==
+        b.standings
+      ) {
+        return (
+          a.standings -
+          b.standings
+        );
+      }
+
+      return (
+        Number(
+          b.points || 0
+        ) -
+        Number(
+          a.points || 0
+        )
+      );
+    }
   );
 }
 
 function Standings() {
-  const savedView =
-    getSavedView();
+  /*
+   * IMPORTANT:
+   *
+   * Read each API cache independently.
+   *
+   * We no longer maintain one giant
+   * "Standings View" object that requires
+   * every API to succeed before the page
+   * can exist.
+   */
+  const initialPlayers =
+    getCachedValue(
+      PLAYERS_CACHE_KEY
+    ) || [];
+
+  const initialLive =
+    getCachedValue(
+      LIVE_CACHE_KEY
+    ) || null;
+
+  const initialRecords =
+    getCachedValue(
+      RECORDS_CACHE_KEY
+    ) || [];
+
+  const initialMatchups =
+    getCachedValue(
+      MATCHUPS_CACHE_KEY
+    ) || [];
+
+  const initialOdds =
+    getCachedValue(
+      ODDS_CACHE_KEY
+    ) || [];
 
   const [
     standings,
     setStandings,
   ] = useState(
-    savedView?.standings ||
-      []
+    sortStandings(
+      initialPlayers
+    )
   );
 
   const [live, setLive] =
     useState(
-      savedView?.live ||
-        null
+      initialLive
     );
 
   const [
     records,
     setRecords,
   ] = useState(
-    savedView?.records ||
-      []
+    initialRecords
   );
 
   const [
     largestUpset,
     setLargestUpset,
-  ] = useState(
-    savedView?.largestUpset ||
-      null
+  ] = useState(() =>
+    findLargestUpset(
+      initialMatchups,
+      initialOdds
+    )
   );
 
-  const [loading, setLoading] =
-    useState(
-      !savedView
-    );
+  /*
+   * The ONLY thing that controls the
+   * main loading screen is whether we
+   * already have player standings.
+   */
+  const [
+    loading,
+    setLoading,
+  ] = useState(
+    initialPlayers.length ===
+      0
+  );
 
   const [error, setError] =
     useState("");
@@ -107,13 +164,7 @@ function Standings() {
   const [
     lastUpdated,
     setLastUpdated,
-  ] = useState(
-    savedView?.lastUpdated
-      ? new Date(
-          savedView.lastUpdated
-        )
-      : null
-  );
+  ] = useState(null);
 
   const mountedRef =
     useRef(true);
@@ -121,48 +172,78 @@ function Standings() {
   const intervalRef =
     useRef(null);
 
-  const requestInFlightRef =
+  const playersRequestRef =
     useRef(false);
 
+  const liveRequestRef =
+    useRef(false);
+
+  const recordsRequestRef =
+    useRef(false);
+
+  const matchupsRequestRef =
+    useRef(false);
+
+  const oddsRequestRef =
+    useRef(false);
+
+  /*
+   * Keep the latest matchup and odds
+   * datasets in refs.
+   *
+   * This lets either API finish first.
+   * Whichever finishes second immediately
+   * recalculates Largest Upset.
+   */
+  const matchupsRef =
+    useRef(
+      initialMatchups
+    );
+
+  const oddsRef =
+    useRef(
+      initialOdds
+    );
+
   useEffect(() => {
-    mountedRef.current = true;
+    mountedRef.current =
+      true;
 
-    async function saveView(
-      nextView
-    ) {
-      try {
-        await getCachedData(
-          STANDINGS_VIEW_CACHE_KEY,
-          async () => ({
-            ...nextView,
-            lastUpdated:
-              nextView.lastUpdated.toISOString(),
-          }),
-          {
-            ttl: Infinity,
-            force: true,
-          }
-        );
-      } catch (
-        cacheError
-      ) {
-        console.error(
-          "Standings view cache error:",
-          cacheError
-        );
-      }
-    }
-
-    async function loadStandings({
-      showLoading = false,
-    } = {}) {
+    function updateLargestUpset() {
       if (
-        requestInFlightRef.current
+        !mountedRef.current
       ) {
         return;
       }
 
-      requestInFlightRef.current =
+      setLargestUpset(
+        findLargestUpset(
+          matchupsRef.current,
+          oddsRef.current
+        )
+      );
+    }
+
+    /*
+     * --------------------------------
+     * CRITICAL DATA
+     * --------------------------------
+     *
+     * This controls whether the user
+     * can actually see the Standings
+     * page.
+     */
+    async function loadPlayers({
+      force = false,
+      showLoading = false,
+    } = {}) {
+      if (
+        playersRequestRef.current
+      ) {
+        return;
+      }
+
+      playersRequestRef.current =
         true;
 
       if (
@@ -173,67 +254,16 @@ function Standings() {
       }
 
       try {
-        /*
-         * Every source starts at the same time.
-         *
-         * getCachedData() will:
-         * 1. return fresh cached data immediately;
-         * 2. reuse an existing in-flight request;
-         * 3. only hit Google when stale.
-         */
-        const [
-          playersResult,
-          liveResult,
-          recordsResult,
-          matchupsResult,
-          oddsResult,
-        ] =
-          await Promise.allSettled([
-            getCachedData(
-              PLAYERS_CACHE_KEY,
-              getPlayers,
-              {
-                ttl:
-                  REFRESH_INTERVAL,
-              }
-            ),
-
-            getCachedData(
-              LIVE_CACHE_KEY,
-              getLiveData,
-              {
-                ttl:
-                  REFRESH_INTERVAL,
-              }
-            ),
-
-            getCachedData(
-              RECORDS_CACHE_KEY,
-              getAllPlayerRecords,
-              {
-                ttl:
-                  REFRESH_INTERVAL,
-              }
-            ),
-
-            getCachedData(
-              MATCHUPS_CACHE_KEY,
-              getCurrentGameMatchups,
-              {
-                ttl:
-                  REFRESH_INTERVAL,
-              }
-            ),
-
-            getCachedData(
-              ODDS_CACHE_KEY,
-              getOdds,
-              {
-                ttl:
-                  Infinity,
-              }
-            ),
-          ]);
+        const playersData =
+          await getCachedData(
+            PLAYERS_CACHE_KEY,
+            getPlayers,
+            {
+              ttl:
+                REFRESH_INTERVAL,
+              force,
+            }
+          );
 
         if (
           !mountedRef.current
@@ -241,181 +271,373 @@ function Standings() {
           return;
         }
 
-        if (
-          playersResult.status ===
-          "rejected"
-        ) {
-          throw playersResult.reason;
-        }
-
-        const playersData =
-          playersResult.value ||
-          [];
-
-        const nextLive =
-          liveResult.status ===
-          "fulfilled"
-            ? liveResult.value
-            : live;
-
-        const nextRecords =
-          recordsResult.status ===
-          "fulfilled"
-            ? recordsResult.value ||
-              []
-            : records;
-
-        const nextMatchups =
-          matchupsResult.status ===
-          "fulfilled"
-            ? matchupsResult.value ||
-              []
-            : getCachedValue(
-                MATCHUPS_CACHE_KEY
-              ) || [];
-
-        const nextOdds =
-          oddsResult.status ===
-          "fulfilled"
-            ? oddsResult.value ||
-              []
-            : getCachedValue(
-                ODDS_CACHE_KEY
-              ) || [];
-
-        if (
-          liveResult.status ===
-          "rejected"
-        ) {
-          console.error(
-            "Standings live data error:",
-            liveResult.reason
+        const sorted =
+          sortStandings(
+            playersData
           );
-        }
-
-        if (
-          recordsResult.status ===
-          "rejected"
-        ) {
-          console.error(
-            "Standings record data error:",
-            recordsResult.reason
-          );
-        }
-
-        if (
-          matchupsResult.status ===
-          "rejected"
-        ) {
-          console.error(
-            "Standings matchup data error:",
-            matchupsResult.reason
-          );
-        }
-
-        if (
-          oddsResult.status ===
-          "rejected"
-        ) {
-          console.error(
-            "Standings odds data error:",
-            oddsResult.reason
-          );
-        }
-
-        const sortedStandings =
-          [...playersData].sort(
-            (a, b) => {
-              if (
-                a.standings !==
-                b.standings
-              ) {
-                return (
-                  a.standings -
-                  b.standings
-                );
-              }
-
-              return (
-                Number(
-                  b.points || 0
-                ) -
-                Number(
-                  a.points || 0
-                )
-              );
-            }
-          );
-
-        const upset =
-          findLargestUpset(
-            nextMatchups,
-            nextOdds
-          );
-
-        const now =
-          new Date();
 
         setStandings(
-          sortedStandings
+          sorted
         );
 
-        setLive(
-          nextLive
-        );
-
-        setRecords(
-          nextRecords
-        );
-
-        setLargestUpset(
-          upset
-        );
+        /*
+         * As soon as Players returns,
+         * REMOVE THE LOADING SCREEN.
+         *
+         * We do NOT wait for:
+         * - Live
+         * - Records
+         * - Current Game
+         * - Odds
+         */
+        setLoading(false);
 
         setLastUpdated(
-          now
+          new Date()
         );
-
-        saveView({
-          standings:
-            sortedStandings,
-          live:
-            nextLive,
-          records:
-            nextRecords,
-          largestUpset:
-            upset,
-          lastUpdated:
-            now,
-        });
 
         setError("");
       } catch (err) {
         console.error(
-          "Standings page error:",
+          "Standings player data error:",
           err
         );
 
         if (
-          mountedRef.current &&
-          standings.length ===
-            0
+          mountedRef.current
         ) {
-          setError(
-            "Unable to load the live standings."
-          );
+          /*
+           * Only show a fatal error if
+           * we truly have no standings
+           * to display.
+           */
+          if (
+            standings.length ===
+            0
+          ) {
+            setError(
+              "Unable to load the live standings."
+            );
+
+            setLoading(
+              false
+            );
+          }
         }
       } finally {
-        requestInFlightRef.current =
+        playersRequestRef.current =
           false;
+      }
+    }
+
+    /*
+     * --------------------------------
+     * LIVE SUMMARY DATA
+     * --------------------------------
+     *
+     * Luckiest, Unluckiest,
+     * Porch Beers, etc.
+     *
+     * Never blocks the standings.
+     */
+    async function loadLive({
+      force = false,
+    } = {}) {
+      if (
+        liveRequestRef.current
+      ) {
+        return;
+      }
+
+      liveRequestRef.current =
+        true;
+
+      try {
+        const liveData =
+          await getCachedData(
+            LIVE_CACHE_KEY,
+            getLiveData,
+            {
+              ttl:
+                REFRESH_INTERVAL,
+              force,
+            }
+          );
 
         if (
-          mountedRef.current &&
-          showLoading
+          !mountedRef.current
         ) {
-          setLoading(false);
+          return;
         }
+
+        setLive(
+          liveData || null
+        );
+      } catch (err) {
+        console.error(
+          "Standings live data error:",
+          err
+        );
+      } finally {
+        liveRequestRef.current =
+          false;
       }
+    }
+
+    /*
+     * --------------------------------
+     * PLAYER W-L RECORDS
+     * --------------------------------
+     *
+     * Completely secondary.
+     */
+    async function loadRecords({
+      force = false,
+    } = {}) {
+      if (
+        recordsRequestRef.current
+      ) {
+        return;
+      }
+
+      recordsRequestRef.current =
+        true;
+
+      try {
+        const recordsData =
+          await getCachedData(
+            RECORDS_CACHE_KEY,
+            getAllPlayerRecords,
+            {
+              ttl:
+                REFRESH_INTERVAL,
+              force,
+            }
+          );
+
+        if (
+          !mountedRef.current
+        ) {
+          return;
+        }
+
+        setRecords(
+          recordsData || []
+        );
+      } catch (err) {
+        console.error(
+          "Standings records error:",
+          err
+        );
+      } finally {
+        recordsRequestRef.current =
+          false;
+      }
+    }
+
+    /*
+     * --------------------------------
+     * CURRENT MATCHUPS
+     * --------------------------------
+     *
+     * Used only by Largest Upset.
+     *
+     * Never blocks the standings.
+     */
+    async function loadMatchups({
+      force = false,
+    } = {}) {
+      if (
+        matchupsRequestRef.current
+      ) {
+        return;
+      }
+
+      matchupsRequestRef.current =
+        true;
+
+      try {
+        const matchupData =
+          await getCachedData(
+            MATCHUPS_CACHE_KEY,
+            getCurrentGameMatchups,
+            {
+              ttl:
+                REFRESH_INTERVAL,
+              force,
+            }
+          );
+
+        if (
+          !mountedRef.current
+        ) {
+          return;
+        }
+
+        matchupsRef.current =
+          matchupData || [];
+
+        updateLargestUpset();
+      } catch (err) {
+        console.error(
+          "Standings matchup error:",
+          err
+        );
+      } finally {
+        matchupsRequestRef.current =
+          false;
+      }
+    }
+
+    /*
+     * --------------------------------
+     * ODDS
+     * --------------------------------
+     *
+     * Odds essentially never change,
+     * so cache them for the entire
+     * app session.
+     *
+     * This request NEVER blocks the
+     * actual standings.
+     */
+    async function loadOdds() {
+      if (
+        oddsRequestRef.current
+      ) {
+        return;
+      }
+
+      if (
+        isCacheFresh(
+          ODDS_CACHE_KEY,
+          Infinity
+        )
+      ) {
+        oddsRef.current =
+          getCachedValue(
+            ODDS_CACHE_KEY
+          ) || [];
+
+        updateLargestUpset();
+
+        return;
+      }
+
+      oddsRequestRef.current =
+        true;
+
+      try {
+        const oddsData =
+          await getCachedData(
+            ODDS_CACHE_KEY,
+            getOdds,
+            {
+              ttl:
+                Infinity,
+            }
+          );
+
+        if (
+          !mountedRef.current
+        ) {
+          return;
+        }
+
+        oddsRef.current =
+          oddsData || [];
+
+        updateLargestUpset();
+      } catch (err) {
+        console.error(
+          "Standings odds error:",
+          err
+        );
+      } finally {
+        oddsRequestRef.current =
+          false;
+      }
+    }
+
+    /*
+     * --------------------------------
+     * INITIAL LOAD
+     * --------------------------------
+     *
+     * THIS IS THE IMPORTANT CHANGE.
+     *
+     * We start everything at once,
+     * but we DO NOT await everything.
+     */
+    function initialLoad() {
+      /*
+       * Players gets absolute priority.
+       */
+      loadPlayers({
+        showLoading:
+          initialPlayers.length ===
+          0,
+      });
+
+      /*
+       * Everything below happens
+       * independently in the background.
+       */
+      loadLive();
+
+      loadRecords();
+
+      loadMatchups();
+
+      loadOdds();
+    }
+
+    /*
+     * --------------------------------
+     * BACKGROUND REFRESH
+     * --------------------------------
+     */
+    function refreshAllIfNeeded() {
+      if (
+        !isCacheFresh(
+          PLAYERS_CACHE_KEY,
+          REFRESH_INTERVAL
+        )
+      ) {
+        loadPlayers();
+      }
+
+      if (
+        !isCacheFresh(
+          LIVE_CACHE_KEY,
+          REFRESH_INTERVAL
+        )
+      ) {
+        loadLive();
+      }
+
+      if (
+        !isCacheFresh(
+          RECORDS_CACHE_KEY,
+          REFRESH_INTERVAL
+        )
+      ) {
+        loadRecords();
+      }
+
+      if (
+        !isCacheFresh(
+          MATCHUPS_CACHE_KEY,
+          REFRESH_INTERVAL
+        )
+      ) {
+        loadMatchups();
+      }
+
+      /*
+       * Odds are intentionally NOT
+       * refreshed.
+       */
     }
 
     function stopPolling() {
@@ -431,35 +653,6 @@ function Standings() {
       }
     }
 
-    function dataIsStale() {
-      return (
-        !isCacheFresh(
-          PLAYERS_CACHE_KEY,
-          REFRESH_INTERVAL
-        ) ||
-        !isCacheFresh(
-          LIVE_CACHE_KEY,
-          REFRESH_INTERVAL
-        ) ||
-        !isCacheFresh(
-          RECORDS_CACHE_KEY,
-          REFRESH_INTERVAL
-        ) ||
-        !isCacheFresh(
-          MATCHUPS_CACHE_KEY,
-          REFRESH_INTERVAL
-        )
-      );
-    }
-
-    function refreshIfStale() {
-      if (
-        dataIsStale()
-      ) {
-        loadStandings();
-      }
-    }
-
     function startPolling() {
       stopPolling();
 
@@ -472,7 +665,7 @@ function Standings() {
 
       intervalRef.current =
         setInterval(
-          refreshIfStale,
+          refreshAllIfNeeded,
           REFRESH_INTERVAL
         );
     }
@@ -482,26 +675,15 @@ function Standings() {
         document.visibilityState ===
         "visible"
       ) {
-        refreshIfStale();
+        refreshAllIfNeeded();
+
         startPolling();
       } else {
         stopPolling();
       }
     }
 
-    /*
-     * Returning from Games should now render
-     * the previous Standings immediately.
-     */
-    if (savedView) {
-      setLoading(false);
-
-      refreshIfStale();
-    } else {
-      loadStandings({
-        showLoading: true,
-      });
-    }
+    initialLoad();
 
     startPolling();
 
@@ -511,7 +693,8 @@ function Standings() {
     );
 
     return () => {
-      mountedRef.current = false;
+      mountedRef.current =
+        false;
 
       stopPolling();
 
@@ -522,6 +705,10 @@ function Standings() {
     };
   }, []);
 
+  /*
+   * Only the Players API can keep
+   * this screen in loading mode.
+   */
   if (loading) {
     return (
       <div className="standings-page">
@@ -977,9 +1164,7 @@ function UpsetTile({
                 "13px",
             }}
           >
-            {
-              upset.winner
-            }
+            {upset.winner}
           </strong>
         </div>
 
@@ -1024,9 +1209,7 @@ function UpsetTile({
                 "13px",
             }}
           >
-            {
-              upset.loser
-            }
+            {upset.loser}
           </strong>
         </div>
 
@@ -1087,7 +1270,8 @@ function SummaryTile({
               "baseline",
             justifyContent:
               "center",
-            gap: "8px",
+            gap:
+              "8px",
           }}
         >
           <strong
@@ -1288,9 +1472,7 @@ function findLargestUpset(
         matchup.score2
       );
 
-    if (
-      !winnerSide
-    ) {
+    if (!winnerSide) {
       continue;
     }
 
@@ -1300,9 +1482,7 @@ function findLargestUpset(
         matchup
       );
 
-    if (
-      !matchupOdds
-    ) {
+    if (!matchupOdds) {
       continue;
     }
 
