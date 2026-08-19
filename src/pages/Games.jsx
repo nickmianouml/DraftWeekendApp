@@ -8,24 +8,57 @@ import { Link } from "react-router-dom";
 import games from "../data/games";
 import { getGameStatuses } from "../services/gameStatus";
 
+import {
+  getCachedData,
+  getCachedValue,
+  isCacheFresh,
+} from "../utils/dataCache";
+
 import "../styles/games.css";
 
 const REFRESH_INTERVAL = 30000;
 
+const GAME_STATUS_CACHE_KEY =
+  "game-statuses";
+
+const GAMES_VIEW_CACHE_KEY =
+  "games-view";
+
+function getSavedGamesView() {
+  return getCachedValue(
+    GAMES_VIEW_CACHE_KEY
+  );
+}
+
 function Games() {
-  const [statuses, setStatuses] =
-    useState([]);
+  const savedView =
+    getSavedGamesView();
+
+  const [
+    statuses,
+    setStatuses,
+  ] = useState(
+    savedView?.statuses || []
+  );
 
   const [
     lastUpdated,
     setLastUpdated,
-  ] = useState(null);
+  ] = useState(
+    savedView?.lastUpdated
+      ? new Date(
+          savedView.lastUpdated
+        )
+      : null
+  );
 
   const [error, setError] =
     useState("");
 
   const [loading, setLoading] =
-    useState(true);
+    useState(
+      !savedView
+    );
 
   const mountedRef =
     useRef(true);
@@ -33,15 +66,55 @@ function Games() {
   const intervalRef =
     useRef(null);
 
-  const statusesSnapshotRef =
-    useRef("");
+  const requestInFlightRef =
+    useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
 
+    function saveView(
+      nextStatuses,
+      nextUpdated
+    ) {
+      /*
+       * Store the actual rendered page state
+       * in the same shared cache module.
+       */
+      getCachedData(
+        GAMES_VIEW_CACHE_KEY,
+        async () => ({
+          statuses:
+            nextStatuses,
+          lastUpdated:
+            nextUpdated.toISOString(),
+        }),
+        {
+          ttl: Infinity,
+          force: true,
+        }
+      ).catch(
+        (cacheError) => {
+          console.error(
+            "Games view cache error:",
+            cacheError
+          );
+        }
+      );
+    }
+
     async function loadStatuses({
       showLoading = false,
+      force = false,
     } = {}) {
+      if (
+        requestInFlightRef.current
+      ) {
+        return;
+      }
+
+      requestInFlightRef.current =
+        true;
+
       if (
         showLoading &&
         mountedRef.current
@@ -51,34 +124,56 @@ function Games() {
 
       try {
         const data =
-          await getGameStatuses();
+          await getCachedData(
+            GAME_STATUS_CACHE_KEY,
+            getGameStatuses,
+            {
+              ttl:
+                REFRESH_INTERVAL,
+              force,
+            }
+          );
 
-        if (!mountedRef.current) {
+        if (
+          !mountedRef.current
+        ) {
           return;
         }
 
         const nextStatuses =
           data || [];
 
-        const nextSnapshot =
-          JSON.stringify(
-            nextStatuses
-          );
+        const now =
+          new Date();
 
-        if (
-          nextSnapshot !==
-          statusesSnapshotRef.current
-        ) {
-          statusesSnapshotRef.current =
-            nextSnapshot;
+        setStatuses(
+          (previous) => {
+            const previousJson =
+              JSON.stringify(
+                previous
+              );
 
-          setStatuses(
-            nextStatuses
-          );
-        }
+            const nextJson =
+              JSON.stringify(
+                nextStatuses
+              );
 
-        setLastUpdated(
-          new Date()
+            if (
+              previousJson ===
+              nextJson
+            ) {
+              return previous;
+            }
+
+            return nextStatuses;
+          }
+        );
+
+        setLastUpdated(now);
+
+        saveView(
+          nextStatuses,
+          now
         );
 
         setError("");
@@ -91,11 +186,24 @@ function Games() {
         if (
           mountedRef.current
         ) {
-          setError(
-            "Unable to load live game statuses."
-          );
+          /*
+           * If we already have cached data,
+           * keep it on screen instead of
+           * replacing the whole page with
+           * an error state.
+           */
+          if (
+            statuses.length === 0
+          ) {
+            setError(
+              "Unable to load live game statuses."
+            );
+          }
         }
       } finally {
+        requestInFlightRef.current =
+          false;
+
         if (
           mountedRef.current &&
           showLoading
@@ -118,6 +226,17 @@ function Games() {
       }
     }
 
+    function refreshIfStale() {
+      if (
+        !isCacheFresh(
+          GAME_STATUS_CACHE_KEY,
+          REFRESH_INTERVAL
+        )
+      ) {
+        loadStatuses();
+      }
+    }
+
     function startPolling() {
       stopPolling();
 
@@ -130,9 +249,7 @@ function Games() {
 
       intervalRef.current =
         setInterval(
-          () => {
-            loadStatuses();
-          },
+          refreshIfStale,
           REFRESH_INTERVAL
         );
     }
@@ -142,26 +259,33 @@ function Games() {
         document.visibilityState ===
         "visible"
       ) {
-        loadStatuses();
+        refreshIfStale();
         startPolling();
       } else {
         stopPolling();
       }
     }
 
-    async function initialLoad() {
-      await loadStatuses({
+    /*
+     * If the page already has cached data,
+     * render it immediately.
+     *
+     * Only go to the network if the shared
+     * game-status cache has expired.
+     */
+    if (
+      savedView
+    ) {
+      setLoading(false);
+
+      refreshIfStale();
+    } else {
+      loadStatuses({
         showLoading: true,
       });
-
-      if (!mountedRef.current) {
-        return;
-      }
-
-      startPolling();
     }
 
-    initialLoad();
+    startPolling();
 
     document.addEventListener(
       "visibilitychange",
@@ -181,13 +305,8 @@ function Games() {
   }, []);
 
   /*
-   * GameDetails is intentionally lazy-loaded
-   * in App.jsx because it is a very large file.
-   *
-   * Once the Games page itself has rendered,
-   * quietly download that chunk in the
-   * background so tapping a game doesn't need
-   * to wait for it.
+   * Keep the large GameDetails chunk warm
+   * while the user is looking at Games.
    */
   useEffect(() => {
     let cancelled = false;
@@ -197,7 +316,9 @@ function Games() {
         return;
       }
 
-      import("./GameDetails").catch(
+      import(
+        "./GameDetails"
+      ).catch(
         (err) => {
           console.error(
             "Game Details preload error:",
@@ -211,8 +332,10 @@ function Games() {
     let timeoutId = null;
 
     if (
+      typeof window !==
+        "undefined" &&
       "requestIdleCallback" in
-      window
+        window
     ) {
       idleId =
         window.requestIdleCallback(
@@ -316,7 +439,8 @@ function Games() {
     }
 
     if (
-      status === "Complete"
+      status ===
+      "Complete"
     ) {
       return "game-card game-card-complete";
     }
@@ -335,7 +459,8 @@ function Games() {
     }
 
     if (
-      status === "Complete"
+      status ===
+      "Complete"
     ) {
       return "game-status game-status-complete";
     }
@@ -354,7 +479,8 @@ function Games() {
     }
 
     if (
-      status === "Complete"
+      status ===
+      "Complete"
     ) {
       return "✓ Complete";
     }
@@ -367,11 +493,8 @@ function Games() {
       <h1
         className="games-title"
         style={{
-          color:
-            "#ffffff",
-
-          textAlign:
-            "center",
+          color: "#ffffff",
+          textAlign: "center",
         }}
       >
         🎯 Games
@@ -392,10 +515,8 @@ function Games() {
               {
                 hour:
                   "numeric",
-
                 minute:
                   "2-digit",
-
                 second:
                   "2-digit",
               }
@@ -416,9 +537,7 @@ function Games() {
 
           return (
             <Link
-              key={
-                game.id
-              }
+              key={game.id}
               to={`/games/${game.id}`}
               className="game-link"
             >
@@ -429,9 +548,7 @@ function Games() {
               >
                 <div className="game-info">
                   <span className="game-icon">
-                    {
-                      game.icon
-                    }
+                    {game.icon}
                   </span>
 
                   <h2
@@ -441,9 +558,7 @@ function Games() {
                         "#ffffff",
                     }}
                   >
-                    {
-                      game.name
-                    }
+                    {game.name}
                   </h2>
                 </div>
 

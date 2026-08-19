@@ -1,16 +1,47 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { Link } from "react-router-dom";
 
 import { getPlayers } from "../services/players";
 import { getLiveData } from "../services/live";
 import { getAllPlayerRecords } from "../services/playerRecord";
 import { getCurrentGameMatchups } from "../services/currentGame";
+
 import {
   formatAmericanOdds,
   getOdds,
 } from "../services/odds";
 
+import {
+  getCachedData,
+  getCachedValue,
+  isCacheFresh,
+} from "../utils/dataCache";
+
 import "../styles/standingsPage.css";
+
+const REFRESH_INTERVAL = 30000;
+
+const PLAYERS_CACHE_KEY =
+  "standings-players";
+
+const LIVE_CACHE_KEY =
+  "standings-live";
+
+const RECORDS_CACHE_KEY =
+  "standings-records";
+
+const MATCHUPS_CACHE_KEY =
+  "current-game-matchups";
+
+const ODDS_CACHE_KEY =
+  "odds";
+
+const STANDINGS_VIEW_CACHE_KEY =
+  "standings-view";
 
 const UPSET_EXCLUDED_GAMES = [
   "Flip Cup",
@@ -25,70 +56,188 @@ const UPSET_EXCLUDED_GAMES = [
   "Thunderchug",
 ];
 
-const REFRESH_INTERVAL = 30000;
+function getSavedView() {
+  return getCachedValue(
+    STANDINGS_VIEW_CACHE_KEY
+  );
+}
 
 function Standings() {
-  const [standings, setStandings] = useState([]);
-  const [live, setLive] = useState(null);
-  const [records, setRecords] = useState([]);
-  const [largestUpset, setLargestUpset] = useState(null);
+  const savedView =
+    getSavedView();
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [lastUpdated, setLastUpdated] = useState(null);
+  const [
+    standings,
+    setStandings,
+  ] = useState(
+    savedView?.standings ||
+      []
+  );
 
-  const oddsRef = useRef([]);
-  const intervalRef = useRef(null);
-  const mountedRef = useRef(true);
+  const [live, setLive] =
+    useState(
+      savedView?.live ||
+        null
+    );
 
-  const standingsSnapshotRef = useRef("");
-  const liveSnapshotRef = useRef("");
-  const recordsSnapshotRef = useRef("");
-  const upsetSnapshotRef = useRef("");
+  const [
+    records,
+    setRecords,
+  ] = useState(
+    savedView?.records ||
+      []
+  );
+
+  const [
+    largestUpset,
+    setLargestUpset,
+  ] = useState(
+    savedView?.largestUpset ||
+      null
+  );
+
+  const [loading, setLoading] =
+    useState(
+      !savedView
+    );
+
+  const [error, setError] =
+    useState("");
+
+  const [
+    lastUpdated,
+    setLastUpdated,
+  ] = useState(
+    savedView?.lastUpdated
+      ? new Date(
+          savedView.lastUpdated
+        )
+      : null
+  );
+
+  const mountedRef =
+    useRef(true);
+
+  const intervalRef =
+    useRef(null);
+
+  const requestInFlightRef =
+    useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
 
-    async function loadOddsOnce() {
+    async function saveView(
+      nextView
+    ) {
       try {
-        const oddsData = await getOdds();
-
-        if (!mountedRef.current) {
-          return;
-        }
-
-        oddsRef.current = oddsData || [];
-      } catch (err) {
-        console.error(
-          "Standings odds load error:",
-          err
+        await getCachedData(
+          STANDINGS_VIEW_CACHE_KEY,
+          async () => ({
+            ...nextView,
+            lastUpdated:
+              nextView.lastUpdated.toISOString(),
+          }),
+          {
+            ttl: Infinity,
+            force: true,
+          }
         );
-
-        oddsRef.current = [];
+      } catch (
+        cacheError
+      ) {
+        console.error(
+          "Standings view cache error:",
+          cacheError
+        );
       }
     }
 
     async function loadStandings({
       showLoading = false,
     } = {}) {
-      if (showLoading) {
+      if (
+        requestInFlightRef.current
+      ) {
+        return;
+      }
+
+      requestInFlightRef.current =
+        true;
+
+      if (
+        showLoading &&
+        mountedRef.current
+      ) {
         setLoading(true);
       }
 
       try {
+        /*
+         * Every source starts at the same time.
+         *
+         * getCachedData() will:
+         * 1. return fresh cached data immediately;
+         * 2. reuse an existing in-flight request;
+         * 3. only hit Google when stale.
+         */
         const [
           playersResult,
           liveResult,
           recordsResult,
           matchupsResult,
-        ] = await Promise.allSettled([
-          getPlayers(),
-          getLiveData(),
-          getAllPlayerRecords(),
-          getCurrentGameMatchups(),
-        ]);
+          oddsResult,
+        ] =
+          await Promise.allSettled([
+            getCachedData(
+              PLAYERS_CACHE_KEY,
+              getPlayers,
+              {
+                ttl:
+                  REFRESH_INTERVAL,
+              }
+            ),
 
-        if (!mountedRef.current) {
+            getCachedData(
+              LIVE_CACHE_KEY,
+              getLiveData,
+              {
+                ttl:
+                  REFRESH_INTERVAL,
+              }
+            ),
+
+            getCachedData(
+              RECORDS_CACHE_KEY,
+              getAllPlayerRecords,
+              {
+                ttl:
+                  REFRESH_INTERVAL,
+              }
+            ),
+
+            getCachedData(
+              MATCHUPS_CACHE_KEY,
+              getCurrentGameMatchups,
+              {
+                ttl:
+                  REFRESH_INTERVAL,
+              }
+            ),
+
+            getCachedData(
+              ODDS_CACHE_KEY,
+              getOdds,
+              {
+                ttl:
+                  Infinity,
+              }
+            ),
+          ]);
+
+        if (
+          !mountedRef.current
+        ) {
           return;
         }
 
@@ -100,25 +249,39 @@ function Standings() {
         }
 
         const playersData =
-          playersResult.value || [];
+          playersResult.value ||
+          [];
 
-        const liveData =
+        const nextLive =
           liveResult.status ===
           "fulfilled"
             ? liveResult.value
-            : null;
+            : live;
 
-        const recordsData =
+        const nextRecords =
           recordsResult.status ===
           "fulfilled"
-            ? recordsResult.value
-            : [];
+            ? recordsResult.value ||
+              []
+            : records;
 
-        const matchupData =
+        const nextMatchups =
           matchupsResult.status ===
           "fulfilled"
-            ? matchupsResult.value
-            : [];
+            ? matchupsResult.value ||
+              []
+            : getCachedValue(
+                MATCHUPS_CACHE_KEY
+              ) || [];
+
+        const nextOdds =
+          oddsResult.status ===
+          "fulfilled"
+            ? oddsResult.value ||
+              []
+            : getCachedValue(
+                ODDS_CACHE_KEY
+              ) || [];
 
         if (
           liveResult.status ===
@@ -150,6 +313,16 @@ function Standings() {
           );
         }
 
+        if (
+          oddsResult.status ===
+          "rejected"
+        ) {
+          console.error(
+            "Standings odds data error:",
+            oddsResult.reason
+          );
+        }
+
         const sortedStandings =
           [...playersData].sort(
             (a, b) => {
@@ -176,79 +349,45 @@ function Standings() {
 
         const upset =
           findLargestUpset(
-            matchupData,
-            oddsRef.current
+            nextMatchups,
+            nextOdds
           );
 
-        const newStandingsSnapshot =
-          JSON.stringify(
-            sortedStandings
-          );
+        const now =
+          new Date();
 
-        if (
-          newStandingsSnapshot !==
-          standingsSnapshotRef.current
-        ) {
-          standingsSnapshotRef.current =
-            newStandingsSnapshot;
+        setStandings(
+          sortedStandings
+        );
 
-          setStandings(
-            sortedStandings
-          );
-        }
+        setLive(
+          nextLive
+        );
 
-        const newLiveSnapshot =
-          JSON.stringify(
-            liveData
-          );
+        setRecords(
+          nextRecords
+        );
 
-        if (
-          newLiveSnapshot !==
-          liveSnapshotRef.current
-        ) {
-          liveSnapshotRef.current =
-            newLiveSnapshot;
-
-          setLive(liveData);
-        }
-
-        const newRecordsSnapshot =
-          JSON.stringify(
-            recordsData
-          );
-
-        if (
-          newRecordsSnapshot !==
-          recordsSnapshotRef.current
-        ) {
-          recordsSnapshotRef.current =
-            newRecordsSnapshot;
-
-          setRecords(
-            recordsData
-          );
-        }
-
-        const newUpsetSnapshot =
-          JSON.stringify(
-            upset
-          );
-
-        if (
-          newUpsetSnapshot !==
-          upsetSnapshotRef.current
-        ) {
-          upsetSnapshotRef.current =
-            newUpsetSnapshot;
-
-          setLargestUpset(
-            upset
-          );
-        }
+        setLargestUpset(
+          upset
+        );
 
         setLastUpdated(
-          new Date()
+          now
         );
+
+        saveView({
+          standings:
+            sortedStandings,
+          live:
+            nextLive,
+          records:
+            nextRecords,
+          largestUpset:
+            upset,
+          lastUpdated:
+            now,
+        });
 
         setError("");
       } catch (err) {
@@ -258,13 +397,18 @@ function Standings() {
         );
 
         if (
-          mountedRef.current
+          mountedRef.current &&
+          standings.length ===
+            0
         ) {
           setError(
             "Unable to load the live standings."
           );
         }
       } finally {
+        requestInFlightRef.current =
+          false;
+
         if (
           mountedRef.current &&
           showLoading
@@ -287,6 +431,35 @@ function Standings() {
       }
     }
 
+    function dataIsStale() {
+      return (
+        !isCacheFresh(
+          PLAYERS_CACHE_KEY,
+          REFRESH_INTERVAL
+        ) ||
+        !isCacheFresh(
+          LIVE_CACHE_KEY,
+          REFRESH_INTERVAL
+        ) ||
+        !isCacheFresh(
+          RECORDS_CACHE_KEY,
+          REFRESH_INTERVAL
+        ) ||
+        !isCacheFresh(
+          MATCHUPS_CACHE_KEY,
+          REFRESH_INTERVAL
+        )
+      );
+    }
+
+    function refreshIfStale() {
+      if (
+        dataIsStale()
+      ) {
+        loadStandings();
+      }
+    }
+
     function startPolling() {
       stopPolling();
 
@@ -299,29 +472,9 @@ function Standings() {
 
       intervalRef.current =
         setInterval(
-          () => {
-            loadStandings();
-          },
+          refreshIfStale,
           REFRESH_INTERVAL
         );
-    }
-
-    async function initialLoad() {
-      await loadOddsOnce();
-
-      if (!mountedRef.current) {
-        return;
-      }
-
-      await loadStandings({
-        showLoading: true,
-      });
-
-      if (!mountedRef.current) {
-        return;
-      }
-
-      startPolling();
     }
 
     function handleVisibilityChange() {
@@ -329,14 +482,28 @@ function Standings() {
         document.visibilityState ===
         "visible"
       ) {
-        loadStandings();
+        refreshIfStale();
         startPolling();
       } else {
         stopPolling();
       }
     }
 
-    initialLoad();
+    /*
+     * Returning from Games should now render
+     * the previous Standings immediately.
+     */
+    if (savedView) {
+      setLoading(false);
+
+      refreshIfStale();
+    } else {
+      loadStandings({
+        showLoading: true,
+      });
+    }
+
+    startPolling();
 
     document.addEventListener(
       "visibilitychange",
@@ -360,25 +527,34 @@ function Standings() {
       <div className="standings-page">
         <h1
           style={{
-            color: "#ffffff",
-            textAlign: "center",
+            color:
+              "#ffffff",
+            textAlign:
+              "center",
           }}
         >
           🏆 2026 Standings
         </h1>
 
-        <p>Loading standings...</p>
+        <p>
+          Loading standings...
+        </p>
       </div>
     );
   }
 
-  if (error) {
+  if (
+    error &&
+    standings.length === 0
+  ) {
     return (
       <div className="standings-page">
         <h1
           style={{
-            color: "#ffffff",
-            textAlign: "center",
+            color:
+              "#ffffff",
+            textAlign:
+              "center",
           }}
         >
           🏆 2026 Standings
@@ -395,7 +571,8 @@ function Standings() {
           ...standings.map(
             (player) =>
               Number(
-                player.points || 0
+                player.points ||
+                  0
               )
           )
         )
@@ -406,16 +583,21 @@ function Standings() {
       <div
         className="standings-heading"
         style={{
-          display: "block",
-          textAlign: "center",
+          display:
+            "block",
+          textAlign:
+            "center",
         }}
       >
         <div>
           <h1
             style={{
-              color: "#ffffff",
-              textAlign: "center",
-              marginBottom: "4px",
+              color:
+                "#ffffff",
+              textAlign:
+                "center",
+              marginBottom:
+                "4px",
             }}
           >
             🏆 2026 Standings
@@ -430,16 +612,20 @@ function Standings() {
           <p
             className="standings-updated"
             style={{
-              textAlign: "center",
+              textAlign:
+                "center",
             }}
           >
             Updated{" "}
             {lastUpdated.toLocaleTimeString(
               [],
               {
-                hour: "numeric",
-                minute: "2-digit",
-                second: "2-digit",
+                hour:
+                  "numeric",
+                minute:
+                  "2-digit",
+                second:
+                  "2-digit",
               }
             )}
           </p>
@@ -451,7 +637,9 @@ function Standings() {
           icon="🔥"
           label="Luckiest"
           value={formatPPS(
-            live?.["Highest PPS"]
+            live?.[
+              "Highest PPS"
+            ]
           )}
           showPPS
           detail={
@@ -462,14 +650,18 @@ function Standings() {
         />
 
         <UpsetTile
-          upset={largestUpset}
+          upset={
+            largestUpset
+          }
         />
 
         <SummaryTile
           icon="☘️"
           label="Unluckiest"
           value={formatPPS(
-            live?.["Lowest PPS"]
+            live?.[
+              "Lowest PPS"
+            ]
           )}
           showPPS
           detail={
@@ -493,7 +685,10 @@ function Standings() {
 
       <div className="standings-list">
         {standings.map(
-          (player, index) => {
+          (
+            player,
+            index
+          ) => {
             const rank =
               player.standings ||
               index + 1;
@@ -574,7 +769,8 @@ function Standings() {
                             "baseline",
                           justifyContent:
                             "center",
-                          gap: "5px",
+                          gap:
+                            "5px",
                         }}
                       >
                         <strong
@@ -749,17 +945,23 @@ function UpsetTile({
 
       <div
         style={{
-          marginTop: "6px",
-          textAlign: "center",
-          lineHeight: 1.2,
+          marginTop:
+            "6px",
+          textAlign:
+            "center",
+          lineHeight:
+            1.2,
         }}
       >
         <div>
           <strong
             style={{
-              color: "#58a6ff",
-              fontSize: "21px",
-              marginRight: "6px",
+              color:
+                "#58a6ff",
+              fontSize:
+                "21px",
+              marginRight:
+                "6px",
             }}
           >
             {formatAmericanOdds(
@@ -769,20 +971,28 @@ function UpsetTile({
 
           <strong
             style={{
-              color: "#3fb950",
-              fontSize: "13px",
+              color:
+                "#3fb950",
+              fontSize:
+                "13px",
             }}
           >
-            {upset.winner}
+            {
+              upset.winner
+            }
           </strong>
         </div>
 
         <div
           style={{
-            color: "#8b949e",
-            fontSize: "10px",
-            fontWeight: "bold",
-            margin: "3px 0",
+            color:
+              "#8b949e",
+            fontSize:
+              "10px",
+            fontWeight:
+              "bold",
+            margin:
+              "3px 0",
             textTransform:
               "uppercase",
           }}
@@ -793,9 +1003,12 @@ function UpsetTile({
         <div>
           <strong
             style={{
-              color: "#58a6ff",
-              fontSize: "14px",
-              marginRight: "6px",
+              color:
+                "#58a6ff",
+              fontSize:
+                "14px",
+              marginRight:
+                "6px",
             }}
           >
             {formatAmericanOdds(
@@ -805,19 +1018,26 @@ function UpsetTile({
 
           <strong
             style={{
-              color: "#ffffff",
-              fontSize: "13px",
+              color:
+                "#ffffff",
+              fontSize:
+                "13px",
             }}
           >
-            {upset.loser}
+            {
+              upset.loser
+            }
           </strong>
         </div>
 
         <div
           style={{
-            color: "#8b949e",
-            fontSize: "11px",
-            marginTop: "5px",
+            color:
+              "#8b949e",
+            fontSize:
+              "11px",
+            marginTop:
+              "5px",
           }}
         >
           {upset.game}
@@ -838,16 +1058,21 @@ function SummaryTile({
     <div
       className="standings-summary-tile"
       style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
+        display:
+          "flex",
+        flexDirection:
+          "column",
+        alignItems:
+          "center",
+        justifyContent:
+          "center",
       }}
     >
       <span
         className="summary-label"
         style={{
-          marginBottom: "7px",
+          marginBottom:
+            "7px",
         }}
       >
         {icon} {label}
@@ -856,17 +1081,22 @@ function SummaryTile({
       {showPPS ? (
         <div
           style={{
-            display: "flex",
-            alignItems: "baseline",
-            justifyContent: "center",
+            display:
+              "flex",
+            alignItems:
+              "baseline",
+            justifyContent:
+              "center",
             gap: "8px",
           }}
         >
           <strong
             className="summary-value"
             style={{
-              fontSize: "30px",
-              lineHeight: 1,
+              fontSize:
+                "30px",
+              lineHeight:
+                1,
             }}
           >
             {value}
@@ -874,9 +1104,12 @@ function SummaryTile({
 
           <span
             style={{
-              color: "#8b949e",
-              fontSize: "12px",
-              fontWeight: "bold",
+              color:
+                "#8b949e",
+              fontSize:
+                "12px",
+              fontWeight:
+                "bold",
               textTransform:
                 "uppercase",
             }}
@@ -888,8 +1121,10 @@ function SummaryTile({
         <strong
           className="summary-value"
           style={{
-            fontSize: "30px",
-            lineHeight: 1,
+            fontSize:
+              "30px",
+            lineHeight:
+              1,
           }}
         >
           {value}
@@ -899,10 +1134,14 @@ function SummaryTile({
       <span
         className="summary-detail"
         style={{
-          fontSize: "14px",
-          fontWeight: "bold",
-          marginTop: "9px",
-          lineHeight: 1.1,
+          fontSize:
+            "14px",
+          fontWeight:
+            "bold",
+          marginTop:
+            "9px",
+          lineHeight:
+            1.1,
         }}
       >
         {detail}
@@ -920,8 +1159,10 @@ function PlayerStat({
   return (
     <div
       style={{
-        padding: "16px 8px",
-        textAlign: "center",
+        padding:
+          "16px 8px",
+        textAlign:
+          "center",
         borderRight:
           borderRight
             ? "1px solid #30363d"
@@ -934,11 +1175,16 @@ function PlayerStat({
     >
       <span
         style={{
-          display: "block",
-          color: "#8b949e",
-          fontSize: "11px",
-          textTransform: "uppercase",
-          marginBottom: "8px",
+          display:
+            "block",
+          color:
+            "#8b949e",
+          fontSize:
+            "11px",
+          textTransform:
+            "uppercase",
+          marginBottom:
+            "8px",
         }}
       >
         {label}
@@ -946,8 +1192,10 @@ function PlayerStat({
 
       <strong
         style={{
-          color: "#ffffff",
-          fontSize: "16px",
+          color:
+            "#ffffff",
+          fontSize:
+            "16px",
         }}
       >
         {value}
@@ -959,16 +1207,23 @@ function PlayerStat({
 function normalizeName(
   value
 ) {
-  return String(value || "")
+  return String(
+    value || ""
+  )
     .trim()
     .toLowerCase()
-    .replace(/\s+/g, " ");
+    .replace(
+      /\s+/g,
+      " "
+    );
 }
 
 function normalizeGameName(
   value
 ) {
-  return String(value || "")
+  return String(
+    value || ""
+  )
     .trim()
     .toLowerCase();
 }
@@ -976,11 +1231,15 @@ function normalizeGameName(
 function normalizeTeam(
   value
 ) {
-  return String(value || "")
+  return String(
+    value || ""
+  )
     .split(
       /\s*\/\s*|\s*,\s*|\s*&\s*/
     )
-    .map(normalizeName)
+    .map(
+      normalizeName
+    )
     .filter(Boolean)
     .sort()
     .join("|");
@@ -995,10 +1254,13 @@ function isUpsetEligibleGame(
     );
 
   return !UPSET_EXCLUDED_GAMES.some(
-    (excludedGame) =>
+    (
+      excludedGame
+    ) =>
       normalizeGameName(
         excludedGame
-      ) === normalizedGame
+      ) ===
+      normalizedGame
   );
 }
 
@@ -1026,7 +1288,9 @@ function findLargestUpset(
         matchup.score2
       );
 
-    if (!winnerSide) {
+    if (
+      !winnerSide
+    ) {
       continue;
     }
 
@@ -1036,7 +1300,9 @@ function findLargestUpset(
         matchup
       );
 
-    if (!matchupOdds) {
+    if (
+      !matchupOdds
+    ) {
       continue;
     }
 
@@ -1051,14 +1317,16 @@ function findLargestUpset(
       );
 
     if (
-      winningOdds === null ||
+      winningOdds ===
+        null ||
       winningOdds <= 0
     ) {
       continue;
     }
 
     candidates.push({
-      game: matchup.game,
+      game:
+        matchup.game,
 
       winner:
         winnerSide === 1
@@ -1070,7 +1338,8 @@ function findLargestUpset(
           ? matchup.team2
           : matchup.team1,
 
-      odds: winningOdds,
+      odds:
+        winningOdds,
 
       losingOdds:
         winnerSide === 1
@@ -1080,14 +1349,16 @@ function findLargestUpset(
   }
 
   if (
-    candidates.length === 0
+    candidates.length ===
+    0
   ) {
     return null;
   }
 
   candidates.sort(
     (a, b) =>
-      b.odds - a.odds
+      b.odds -
+      a.odds
   );
 
   return candidates[0];
@@ -1117,10 +1388,12 @@ function findOddsForMatchup(
       (item) =>
         normalizeGameName(
           item.game
-        ) === targetGame &&
+        ) ===
+          targetGame &&
         normalizeName(
           item.type
-        ) === "matchup"
+        ) ===
+          "matchup"
     );
 
   const direct =
@@ -1128,10 +1401,12 @@ function findOddsForMatchup(
       (item) =>
         normalizeTeam(
           item.team1
-        ) === team1 &&
+        ) ===
+          team1 &&
         normalizeTeam(
           item.team2
-        ) === team2
+        ) ===
+          team2
     );
 
   if (direct) {
@@ -1148,10 +1423,12 @@ function findOddsForMatchup(
       (item) =>
         normalizeTeam(
           item.team1
-        ) === team2 &&
+        ) ===
+          team2 &&
         normalizeTeam(
           item.team2
-        ) === team1
+        ) ===
+          team1
     );
 
   if (reversed) {
@@ -1180,7 +1457,10 @@ function getMatchupWinnerSide(
       score2 ?? ""
     ).trim();
 
-  if (!raw1 || !raw2) {
+  if (
+    !raw1 ||
+    !raw2
+  ) {
     return null;
   }
 
@@ -1229,7 +1509,8 @@ function getMatchupWinnerSide(
     Number.isNaN(
       number2
     ) ||
-    number1 === number2
+    number1 ===
+      number2
   ) {
     return null;
   }
@@ -1248,7 +1529,10 @@ function parseAmericanOdds(
       value ?? ""
     )
       .trim()
-      .replace(/,/g, "");
+      .replace(
+        /,/g,
+        ""
+      );
 
   if (!raw) {
     return null;
@@ -1293,15 +1577,21 @@ function findPlayerRecord(
 function getRankDisplay(
   rank
 ) {
-  if (rank === 1) {
+  if (
+    rank === 1
+  ) {
     return "🥇";
   }
 
-  if (rank === 2) {
+  if (
+    rank === 2
+  ) {
     return "🥈";
   }
 
-  if (rank === 3) {
+  if (
+    rank === 3
+  ) {
     return "🥉";
   }
 

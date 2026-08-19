@@ -12,21 +12,8 @@ import {
 import Header from "./components/Header";
 import BottomNav from "./components/BottomNav";
 
-/*
- * Keep Standings eagerly loaded.
- *
- * This is the app's home page, so we want it
- * available immediately.
- */
 import Standings from "./pages/Standings";
 
-/*
- * Everything else is loaded only when the
- * user actually navigates to that page.
- *
- * GameDetails is especially valuable to split
- * because it is now a very large file.
- */
 const PlayerProfile =
   lazy(() =>
     import(
@@ -63,31 +50,15 @@ const Rules =
     import("./pages/Rules")
   );
 
-import {
-  installGoogleSheetsFetchCache,
-} from "./utils/googleSheetsCache";
-
-/*
- * Install the shared API cache before any child
- * page effects begin making spreadsheet requests.
- */
-installGoogleSheetsFetchCache();
-
 function PageLoader() {
   return (
     <div
       style={{
         minHeight: "180px",
-
         display: "flex",
-
         alignItems: "center",
-
-        justifyContent:
-          "center",
-
+        justifyContent: "center",
         color: "#8b949e",
-
         fontSize: "14px",
       }}
     >
@@ -102,16 +73,10 @@ function App() {
       style={{
         backgroundColor:
           "#0d1117",
-
         color: "white",
-
         minHeight: "100vh",
-
         padding: "20px",
-
-        paddingBottom:
-          "90px",
-
+        paddingBottom: "90px",
         fontFamily:
           "Arial, sans-serif",
       }}
