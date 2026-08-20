@@ -6,6 +6,41 @@ import { getPlayerGames } from "../services/playerGames";
 import { getPlayerRecord } from "../services/playerRecord";
 import games from "../data/games";
 
+import {
+  getCachedData,
+  getCachedValue,
+  isCacheFresh,
+} from "../utils/dataCache";
+
+const REFRESH_INTERVAL = 30000;
+const CRITICAL_TIMEOUT = 8000;
+const SECONDARY_TIMEOUT = 10000;
+const RETRY_DELAY = 1000;
+
+function normalizeCacheName(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+function wait(milliseconds) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
+function getDefaultRecord() {
+  return {
+    wins: 0,
+    losses: 0,
+    gamesPlayed: 0,
+    winPct: 0,
+    winRank: 1,
+    headToHead: [],
+    partnerRecords: [],
+  };
+}
+
 function PlayerProfile() {
   const { playerName } =
     useParams();
@@ -26,15 +61,9 @@ function PlayerProfile() {
   const [
     record,
     setRecord,
-  ] = useState({
-    wins: 0,
-    losses: 0,
-    gamesPlayed: 0,
-    winPct: 0,
-    winRank: 1,
-    headToHead: [],
-    partnerRecords: [],
-  });
+  ] = useState(
+    getDefaultRecord()
+  );
 
   const [
     loading,
@@ -49,97 +78,322 @@ function PlayerProfile() {
   useEffect(() => {
     let active = true;
 
-    async function loadPlayerProfile(
-      showLoading = false
-    ) {
+    const normalizedPlayerName =
+      normalizeCacheName(playerName);
+
+    const playerCacheKey =
+      `player-profile:${normalizedPlayerName}`;
+
+    const gamesCacheKey =
+      `player-games:${normalizedPlayerName}`;
+
+    const recordCacheKey =
+      `player-record:${normalizedPlayerName}`;
+
+    const cachedProfile =
+      getCachedValue(playerCacheKey);
+
+    const cachedGames =
+      getCachedValue(gamesCacheKey);
+
+    const cachedRecord =
+      getCachedValue(recordCacheKey);
+
+    /*
+     * Standings already caches the complete
+     * player list. Reuse that player object
+     * immediately when it is available so
+     * tapping a player from Standings does
+     * not need another network request just
+     * to show the profile header/stats.
+     */
+    const standingsPlayers =
+      getCachedValue(
+        "standings-players"
+      ) || [];
+
+    const playerFromStandings =
+      standingsPlayers.find(
+        (item) =>
+          normalizeCacheName(
+            item.player
+          ) ===
+          normalizedPlayerName
+      ) || null;
+
+    const initialPlayer =
+      cachedProfile ||
+      playerFromStandings;
+
+    if (initialPlayer) {
+      setPlayer(initialPlayer);
+      setLoading(false);
+    }
+
+    if (cachedGames) {
+      setPlayerGames(
+        cachedGames
+      );
+    }
+
+    if (cachedRecord) {
+      setRecord(
+        cachedRecord
+      );
+    }
+
+    async function loadCriticalPlayer({
+      force = false,
+      retry = true,
+      showLoading = false,
+    } = {}) {
+      if (
+        showLoading &&
+        active &&
+        !initialPlayer
+      ) {
+        setLoading(true);
+      }
+
       try {
-        if (showLoading) {
-          setLoading(true);
+        let playerData;
+
+        try {
+          playerData =
+            await getCachedData(
+              playerCacheKey,
+              () =>
+                getPlayer(
+                  playerName
+                ),
+              {
+                ttl:
+                  REFRESH_INTERVAL,
+                force,
+                timeout:
+                  CRITICAL_TIMEOUT,
+              }
+            );
+        } catch (firstError) {
+          console.error(
+            "Initial player profile request failed:",
+            firstError
+          );
+
+          if (
+            !retry ||
+            !active
+          ) {
+            throw firstError;
+          }
+
+          await wait(
+            RETRY_DELAY
+          );
+
+          if (!active) {
+            return false;
+          }
+
+          playerData =
+            await getCachedData(
+              playerCacheKey,
+              () =>
+                getPlayer(
+                  playerName
+                ),
+              {
+                ttl:
+                  REFRESH_INTERVAL,
+                force: true,
+                timeout:
+                  CRITICAL_TIMEOUT,
+              }
+            );
         }
 
-        const [
-          playerData,
-          gamesData,
-          recordData,
-        ] = await Promise.all([
-          getPlayer(
-            playerName
-          ),
-
-          getPlayerGames(
-            playerName
-          ),
-
-          getPlayerRecord(
-            playerName
-          ),
-        ]);
-
         if (!active) {
-          return;
+          return false;
         }
 
         setPlayer(
           playerData
         );
 
-        setPlayerGames(
-          gamesData
-        );
-
-        setRecord(
-          recordData
-        );
-
+        setLoading(false);
         setError("");
+
+        return true;
       } catch (err) {
         console.error(
-          "Player profile error:",
+          "Player profile critical data error:",
           err
         );
 
-        /*
-          Keep existing data visible
-          if only a background refresh
-          fails.
-        */
-        if (
-          active &&
-          !player
-        ) {
-          setError(
-            "Unable to load player profile."
-          );
+        if (!active) {
+          return false;
         }
-      } finally {
+
         if (
-          active &&
-          showLoading
+          initialPlayer ||
+          getCachedValue(
+            playerCacheKey
+          )
         ) {
           setLoading(false);
+          return false;
         }
+
+        setLoading(false);
+
+        setError(
+          "Unable to load player profile."
+        );
+
+        return false;
       }
     }
 
-    /*
-      Initial load.
-    */
-    loadPlayerProfile(
-      true
-    );
+    async function loadPlayerGames({
+      force = false,
+    } = {}) {
+      try {
+        const gamesData =
+          await getCachedData(
+            gamesCacheKey,
+            () =>
+              getPlayerGames(
+                playerName
+              ),
+            {
+              ttl:
+                REFRESH_INTERVAL,
+              force,
+              timeout:
+                SECONDARY_TIMEOUT,
+            }
+          );
 
-    /*
-      Silent background refresh.
-      The page stays rendered.
-    */
+        if (!active) {
+          return;
+        }
+
+        setPlayerGames(
+          gamesData || []
+        );
+      } catch (err) {
+        console.error(
+          "Player games error:",
+          err
+        );
+      }
+    }
+
+    async function loadRecord({
+      force = false,
+    } = {}) {
+      try {
+        const recordData =
+          await getCachedData(
+            recordCacheKey,
+            () =>
+              getPlayerRecord(
+                playerName
+              ),
+            {
+              ttl:
+                REFRESH_INTERVAL,
+              force,
+              timeout:
+                SECONDARY_TIMEOUT,
+            }
+          );
+
+        if (!active) {
+          return;
+        }
+
+        setRecord(
+          recordData ||
+            getDefaultRecord()
+        );
+      } catch (err) {
+        console.error(
+          "Player record error:",
+          err
+        );
+      }
+    }
+
+    async function initialLoad() {
+      /*
+       * Only the core player object can block
+       * the page. Games and record data are
+       * secondary and populate independently.
+       */
+      if (
+        !initialPlayer
+      ) {
+        await loadCriticalPlayer({
+          showLoading: true,
+          retry: true,
+        });
+      } else if (
+        !isCacheFresh(
+          playerCacheKey,
+          REFRESH_INTERVAL
+        )
+      ) {
+        loadCriticalPlayer({
+          retry: true,
+        });
+      }
+
+      if (!active) {
+        return;
+      }
+
+      loadPlayerGames();
+      loadRecord();
+    }
+
+    function refreshIfNeeded() {
+      if (
+        !isCacheFresh(
+          playerCacheKey,
+          REFRESH_INTERVAL
+        )
+      ) {
+        loadCriticalPlayer({
+          retry: true,
+        });
+      }
+
+      if (
+        !isCacheFresh(
+          gamesCacheKey,
+          REFRESH_INTERVAL
+        )
+      ) {
+        loadPlayerGames();
+      }
+
+      if (
+        !isCacheFresh(
+          recordCacheKey,
+          REFRESH_INTERVAL
+        )
+      ) {
+        loadRecord();
+      }
+    }
+
+    initialLoad();
+
     const interval =
       setInterval(
-        () => {
-          loadPlayerProfile(
-            false
-          );
-        },
-        30000
+        refreshIfNeeded,
+        REFRESH_INTERVAL
       );
 
     return () => {
