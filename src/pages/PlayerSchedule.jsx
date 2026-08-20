@@ -7,6 +7,10 @@ import { getCurrentGameMatchups } from "../services/currentGame";
 import { getPlacements } from "../services/placements";
 import { getCaptainGames } from "../services/captains";
 import { getGameExtras } from "../services/gameExtras";
+import {
+  formatAmericanOdds,
+  getOdds,
+} from "../services/odds";
 
 import {
   getCachedData,
@@ -30,6 +34,9 @@ const CAPTAINS_CACHE_KEY =
 const EXTRAS_CACHE_KEY =
   "game-extras-all";
 
+const ODDS_CACHE_KEY =
+  "odds";
+
 const placementGames = [
   "Fuck Yeah",
   "Mouse Trap",
@@ -48,6 +55,253 @@ function normalizeName(value) {
     .trim()
     .toLowerCase()
     .replace(/\s+/g, " ");
+}
+
+function normalizeTeam(value) {
+  return String(value || "")
+    .split(/\s*\/\s*|\s*,\s*|\s*&\s*/)
+    .map(normalizeName)
+    .filter(Boolean)
+    .sort()
+    .join("|");
+}
+
+function getMatchupOdds(
+  odds,
+  gameName,
+  team1,
+  team2
+) {
+  const targetGame =
+    normalizeName(gameName);
+
+  const firstTeam =
+    normalizeTeam(team1);
+
+  const secondTeam =
+    normalizeTeam(team2);
+
+  const gameOdds =
+    (odds || []).filter(
+      (item) =>
+        normalizeName(
+          item.game
+        ) ===
+          targetGame &&
+        normalizeName(
+          item.type
+        ) ===
+          "matchup"
+    );
+
+  const direct =
+    gameOdds.find(
+      (item) =>
+        normalizeTeam(
+          item.team1
+        ) ===
+          firstTeam &&
+        normalizeTeam(
+          item.team2
+        ) ===
+          secondTeam
+    );
+
+  if (direct) {
+    return {
+      odds1:
+        direct.odds1,
+      odds2:
+        direct.odds2,
+    };
+  }
+
+  const reversed =
+    gameOdds.find(
+      (item) =>
+        normalizeTeam(
+          item.team1
+        ) ===
+          secondTeam &&
+        normalizeTeam(
+          item.team2
+        ) ===
+          firstTeam
+    );
+
+  if (reversed) {
+    return {
+      odds1:
+        reversed.odds2,
+      odds2:
+        reversed.odds1,
+    };
+  }
+
+  return {
+    odds1: "",
+    odds2: "",
+  };
+}
+
+function getCaptainOdds(
+  odds,
+  gameName,
+  captain1,
+  captain2
+) {
+  const targetGame =
+    normalizeName(gameName);
+
+  const direct =
+    (odds || []).find(
+      (item) =>
+        normalizeName(
+          item.game
+        ) ===
+          targetGame &&
+        normalizeName(
+          item.type
+        ) ===
+          "matchup" &&
+        normalizeName(
+          item.team1
+        ) ===
+          normalizeName(
+            captain1
+          ) &&
+        normalizeName(
+          item.team2
+        ) ===
+          normalizeName(
+            captain2
+          )
+    );
+
+  if (direct) {
+    return {
+      odds1:
+        direct.odds1,
+      odds2:
+        direct.odds2,
+    };
+  }
+
+  const reversed =
+    (odds || []).find(
+      (item) =>
+        normalizeName(
+          item.game
+        ) ===
+          targetGame &&
+        normalizeName(
+          item.type
+        ) ===
+          "matchup" &&
+        normalizeName(
+          item.team1
+        ) ===
+          normalizeName(
+            captain2
+          ) &&
+        normalizeName(
+          item.team2
+        ) ===
+          normalizeName(
+            captain1
+          )
+    );
+
+  if (reversed) {
+    return {
+      odds1:
+        reversed.odds2,
+      odds2:
+        reversed.odds1,
+    };
+  }
+
+  return {
+    odds1: "",
+    odds2: "",
+  };
+}
+
+function getOutrightOdds(
+  odds,
+  gameName,
+  participant
+) {
+  const targetGame =
+    normalizeName(gameName);
+
+  const participantTeam =
+    normalizeTeam(participant);
+
+  const participantName =
+    normalizeName(participant);
+
+  const teamMatch =
+    (odds || []).find(
+      (item) => {
+        if (
+          normalizeName(
+            item.game
+          ) !==
+            targetGame ||
+          normalizeName(
+            item.type
+          ) !==
+            "team outright"
+        ) {
+          return false;
+        }
+
+        const sourceTeam =
+          normalizeTeam(
+            [
+              item.player1,
+              item.player2,
+            ]
+              .filter(Boolean)
+              .join(" / ")
+          );
+
+        return (
+          sourceTeam ===
+          participantTeam
+        );
+      }
+    );
+
+  if (teamMatch) {
+    return (
+      teamMatch.outrightOdds ||
+      ""
+    );
+  }
+
+  const playerMatch =
+    (odds || []).find(
+      (item) =>
+        normalizeName(
+          item.game
+        ) ===
+          targetGame &&
+        normalizeName(
+          item.type
+        ) ===
+          "individual outright" &&
+        normalizeName(
+          item.player1
+        ) ===
+          participantName
+    );
+
+  return (
+    playerMatch?.outrightOdds ||
+    ""
+  );
 }
 
 function teamIncludesPlayer(team, playerName) {
@@ -196,12 +450,39 @@ function PlayerSchedule() {
   useEffect(() => {
     let active = true;
     let requestInFlight = false;
+    let oddsRequestInFlight = false;
+
+    let latestMatchups =
+      getCachedValue(
+        MATCHUPS_CACHE_KEY
+      ) || [];
+
+    let latestPlacements =
+      getCachedValue(
+        PLACEMENTS_CACHE_KEY
+      ) || [];
+
+    let latestCaptainGames =
+      getCachedValue(
+        CAPTAINS_CACHE_KEY
+      ) || [];
+
+    let latestExtras =
+      getCachedValue(
+        EXTRAS_CACHE_KEY
+      ) || [];
+
+    let latestOdds =
+      getCachedValue(
+        ODDS_CACHE_KEY
+      ) || [];
 
     function buildSchedule(
       allMatchups,
       allPlacements,
       allCaptainGames,
-      allExtras
+      allExtras,
+      allOdds
     ) {
       return games.map(
         (game) => {
@@ -227,7 +508,8 @@ function PlayerSchedule() {
             return buildCaptainScheduleItem(
               game,
               captainGame,
-              decodedPlayerName
+              decodedPlayerName,
+              allOdds
             );
           }
 
@@ -253,7 +535,8 @@ function PlayerSchedule() {
             return buildPlacementScheduleItem(
               game,
               placements,
-              decodedPlayerName
+              decodedPlayerName,
+              allOdds
             );
           }
 
@@ -278,7 +561,8 @@ function PlayerSchedule() {
             return buildEliminationScheduleItem(
               game,
               extras,
-              decodedPlayerName
+              decodedPlayerName,
+              allOdds
             );
           }
 
@@ -316,7 +600,8 @@ function PlayerSchedule() {
           return buildMatchupScheduleItem(
             game,
             matchups,
-            decodedPlayerName
+            decodedPlayerName,
+            allOdds
           );
         }
       );
@@ -481,12 +766,25 @@ function PlayerSchedule() {
           );
         }
 
+        latestMatchups =
+          allMatchups;
+
+        latestPlacements =
+          allPlacements;
+
+        latestCaptainGames =
+          allCaptainGames;
+
+        latestExtras =
+          allExtras;
+
         const nextSchedule =
           buildSchedule(
-            allMatchups,
-            allPlacements,
-            allCaptainGames,
-            allExtras
+            latestMatchups,
+            latestPlacements,
+            latestCaptainGames,
+            latestExtras,
+            latestOdds
           );
 
         setSchedule(
@@ -522,6 +820,107 @@ function PlayerSchedule() {
         }
       } finally {
         requestInFlight =
+          false;
+      }
+    }
+
+    async function loadOdds() {
+      if (
+        oddsRequestInFlight
+      ) {
+        return;
+      }
+
+      if (
+        isCacheFresh(
+          ODDS_CACHE_KEY,
+          Infinity
+        )
+      ) {
+        latestOdds =
+          getCachedValue(
+            ODDS_CACHE_KEY
+          ) || [];
+
+        if (
+          latestMatchups.length > 0 ||
+          latestPlacements.length > 0 ||
+          latestCaptainGames.length > 0 ||
+          latestExtras.length > 0
+        ) {
+          const nextSchedule =
+            buildSchedule(
+              latestMatchups,
+              latestPlacements,
+              latestCaptainGames,
+              latestExtras,
+              latestOdds
+            );
+
+          setSchedule(
+            nextSchedule
+          );
+
+          setCachedData(
+            scheduleCacheKey,
+            nextSchedule
+          );
+        }
+
+        return;
+      }
+
+      oddsRequestInFlight =
+        true;
+
+      try {
+        const oddsData =
+          await getCachedData(
+            ODDS_CACHE_KEY,
+            getOdds,
+            {
+              ttl: Infinity,
+              timeout:
+                REQUEST_TIMEOUT,
+            }
+          );
+
+        if (!active) {
+          return;
+        }
+
+        latestOdds =
+          oddsData || [];
+
+        /*
+         * Odds are non-critical.
+         * The schedule is already visible;
+         * rebuild it locally once odds arrive.
+         */
+        const nextSchedule =
+          buildSchedule(
+            latestMatchups,
+            latestPlacements,
+            latestCaptainGames,
+            latestExtras,
+            latestOdds
+          );
+
+        setSchedule(
+          nextSchedule
+        );
+
+        setCachedData(
+          scheduleCacheKey,
+          nextSchedule
+        );
+      } catch (err) {
+        console.error(
+          "Player schedule odds error:",
+          err
+        );
+      } finally {
+        oddsRequestInFlight =
           false;
       }
     }
@@ -571,6 +970,12 @@ function PlayerSchedule() {
         showLoading: true,
       });
     }
+
+    /*
+     * Odds are session-cached and never
+     * block the schedule from rendering.
+     */
+    loadOdds();
 
     const interval =
       setInterval(
@@ -715,7 +1120,8 @@ function PlayerSchedule() {
 function buildCaptainScheduleItem(
   game,
   captainGame,
-  playerName
+  playerName,
+  odds
 ) {
   if (!captainGame) {
     return {
@@ -803,6 +1209,24 @@ function buildCaptainScheduleItem(
       ? captainGame.score2
       : captainGame.score1;
 
+  const captainOdds =
+    getCaptainOdds(
+      odds,
+      game.name,
+      captainGame.captain1,
+      captainGame.captain2
+    );
+
+  const ownOdds =
+    onTeam1
+      ? captainOdds.odds1
+      : captainOdds.odds2;
+
+  const opponentOdds =
+    onTeam1
+      ? captainOdds.odds2
+      : captainOdds.odds1;
+
   return {
     game,
     type: "captain",
@@ -833,6 +1257,9 @@ function buildCaptainScheduleItem(
             ownScore,
             opponentScore
           ),
+
+        ownOdds,
+        opponentOdds,
       },
     ],
   };
@@ -841,7 +1268,8 @@ function buildCaptainScheduleItem(
 function buildPlacementScheduleItem(
   game,
   placements,
-  playerName
+  playerName,
+  odds
 ) {
   const playerPlacement =
     (
@@ -876,6 +1304,13 @@ function buildPlacementScheduleItem(
         ""
     ).trim();
 
+  const outrightOdds =
+    getOutrightOdds(
+      odds,
+      game.name,
+      playerPlacement.team
+    );
+
   return {
     game,
     type: "placement",
@@ -888,6 +1323,8 @@ function buildPlacementScheduleItem(
         result: place
           ? `Placement: ${place}`
           : "Placement: TBD",
+
+        outrightOdds,
       },
     ],
   };
@@ -896,7 +1333,8 @@ function buildPlacementScheduleItem(
 function buildEliminationScheduleItem(
   game,
   extras,
-  playerName
+  playerName,
+  odds
 ) {
   const playerRows =
     (
@@ -950,6 +1388,13 @@ function buildEliminationScheduleItem(
               finish
                 ? `Finish: ${finish}`
                 : "Finish: TBD",
+
+            outrightOdds:
+              getOutrightOdds(
+                odds,
+                game.name,
+                playerName
+              ),
           };
         }
       ),
@@ -959,7 +1404,8 @@ function buildEliminationScheduleItem(
 function buildMatchupScheduleItem(
   game,
   matchups,
-  playerName
+  playerName,
+  odds
 ) {
   const playerMatchups =
     (
@@ -1027,6 +1473,24 @@ function buildMatchupScheduleItem(
               ? matchup.score2
               : matchup.score1;
 
+          const matchupOdds =
+            getMatchupOdds(
+              odds,
+              game.name,
+              matchup.team1,
+              matchup.team2
+            );
+
+          const ownOdds =
+            onTeam1
+              ? matchupOdds.odds1
+              : matchupOdds.odds2;
+
+          const opponentOdds =
+            onTeam1
+              ? matchupOdds.odds2
+              : matchupOdds.odds1;
+
           return {
             ownTeam:
               ownTeam ||
@@ -1047,6 +1511,9 @@ function buildMatchupScheduleItem(
                 ownScore,
                 opponentScore
               ),
+
+            ownOdds,
+            opponentOdds,
           };
         }
       ),
@@ -1220,6 +1687,21 @@ function MatchupDisplay({
             {matchup.result}
           </div>
         )}
+
+        {matchup.outrightOdds && (
+          <div
+            style={{
+              marginTop: "8px",
+              color: "#58a6ff",
+              fontSize: "13px",
+              fontWeight: "bold",
+            }}
+          >
+            Odds: {formatAmericanOdds(
+              matchup.outrightOdds
+            )}
+          </div>
+        )}
       </div>
     );
   }
@@ -1285,6 +1767,21 @@ function MatchupDisplay({
         }}
       >
         {matchup.ownTeam}
+
+        {matchup.ownOdds && (
+          <div
+            style={{
+              marginTop: "4px",
+              color: "#58a6ff",
+              fontSize: "12px",
+              fontWeight: "bold",
+            }}
+          >
+            {formatAmericanOdds(
+              matchup.ownOdds
+            )}
+          </div>
+        )}
 
         {ownWon && (
           <div
@@ -1362,6 +1859,21 @@ function MatchupDisplay({
         }}
       >
         {matchup.opponentTeam}
+
+        {matchup.opponentOdds && (
+          <div
+            style={{
+              marginTop: "4px",
+              color: "#58a6ff",
+              fontSize: "12px",
+              fontWeight: "bold",
+            }}
+          >
+            {formatAmericanOdds(
+              matchup.opponentOdds
+            )}
+          </div>
+        )}
 
         {opponentWon && (
           <div
