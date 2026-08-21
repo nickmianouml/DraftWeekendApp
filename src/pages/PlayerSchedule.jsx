@@ -9,7 +9,11 @@ import { getCaptainGames } from "../services/captains";
 import { getGameExtras } from "../services/gameExtras";
 import {
   formatAmericanOdds,
+  getCaptainOdds,
+  getMatchupOdds,
   getOdds,
+  getOutrightOdds,
+  hasValidLiarsDiceOdds,
 } from "../services/odds";
 
 import {
@@ -50,258 +54,23 @@ const captainGames = [
   "HR Derby",
 ];
 
+const excludedScheduleGames = new Set([
+  "Thunderchug",
+  "Unluckiest",
+]);
+
+const scheduleGames = games.filter(
+  (game) =>
+    !excludedScheduleGames.has(
+      game.name
+    )
+);
+
 function normalizeName(value) {
   return String(value || "")
     .trim()
     .toLowerCase()
     .replace(/\s+/g, " ");
-}
-
-function normalizeTeam(value) {
-  return String(value || "")
-    .split(/\s*\/\s*|\s*,\s*|\s*&\s*/)
-    .map(normalizeName)
-    .filter(Boolean)
-    .sort()
-    .join("|");
-}
-
-function getMatchupOdds(
-  odds,
-  gameName,
-  team1,
-  team2
-) {
-  const targetGame =
-    normalizeName(gameName);
-
-  const firstTeam =
-    normalizeTeam(team1);
-
-  const secondTeam =
-    normalizeTeam(team2);
-
-  const gameOdds =
-    (odds || []).filter(
-      (item) =>
-        normalizeName(
-          item.game
-        ) ===
-          targetGame &&
-        normalizeName(
-          item.type
-        ) ===
-          "matchup"
-    );
-
-  const direct =
-    gameOdds.find(
-      (item) =>
-        normalizeTeam(
-          item.team1
-        ) ===
-          firstTeam &&
-        normalizeTeam(
-          item.team2
-        ) ===
-          secondTeam
-    );
-
-  if (direct) {
-    return {
-      odds1:
-        direct.odds1,
-      odds2:
-        direct.odds2,
-    };
-  }
-
-  const reversed =
-    gameOdds.find(
-      (item) =>
-        normalizeTeam(
-          item.team1
-        ) ===
-          secondTeam &&
-        normalizeTeam(
-          item.team2
-        ) ===
-          firstTeam
-    );
-
-  if (reversed) {
-    return {
-      odds1:
-        reversed.odds2,
-      odds2:
-        reversed.odds1,
-    };
-  }
-
-  return {
-    odds1: "",
-    odds2: "",
-  };
-}
-
-function getCaptainOdds(
-  odds,
-  gameName,
-  captain1,
-  captain2
-) {
-  const targetGame =
-    normalizeName(gameName);
-
-  const direct =
-    (odds || []).find(
-      (item) =>
-        normalizeName(
-          item.game
-        ) ===
-          targetGame &&
-        normalizeName(
-          item.type
-        ) ===
-          "matchup" &&
-        normalizeName(
-          item.team1
-        ) ===
-          normalizeName(
-            captain1
-          ) &&
-        normalizeName(
-          item.team2
-        ) ===
-          normalizeName(
-            captain2
-          )
-    );
-
-  if (direct) {
-    return {
-      odds1:
-        direct.odds1,
-      odds2:
-        direct.odds2,
-    };
-  }
-
-  const reversed =
-    (odds || []).find(
-      (item) =>
-        normalizeName(
-          item.game
-        ) ===
-          targetGame &&
-        normalizeName(
-          item.type
-        ) ===
-          "matchup" &&
-        normalizeName(
-          item.team1
-        ) ===
-          normalizeName(
-            captain2
-          ) &&
-        normalizeName(
-          item.team2
-        ) ===
-          normalizeName(
-            captain1
-          )
-    );
-
-  if (reversed) {
-    return {
-      odds1:
-        reversed.odds2,
-      odds2:
-        reversed.odds1,
-    };
-  }
-
-  return {
-    odds1: "",
-    odds2: "",
-  };
-}
-
-function getOutrightOdds(
-  odds,
-  gameName,
-  participant
-) {
-  const targetGame =
-    normalizeName(gameName);
-
-  const participantTeam =
-    normalizeTeam(participant);
-
-  const participantName =
-    normalizeName(participant);
-
-  const teamMatch =
-    (odds || []).find(
-      (item) => {
-        if (
-          normalizeName(
-            item.game
-          ) !==
-            targetGame ||
-          normalizeName(
-            item.type
-          ) !==
-            "team outright"
-        ) {
-          return false;
-        }
-
-        const sourceTeam =
-          normalizeTeam(
-            [
-              item.player1,
-              item.player2,
-            ]
-              .filter(Boolean)
-              .join(" / ")
-          );
-
-        return (
-          sourceTeam ===
-          participantTeam
-        );
-      }
-    );
-
-  if (teamMatch) {
-    return (
-      teamMatch.outrightOdds ||
-      ""
-    );
-  }
-
-  const playerMatch =
-    (odds || []).find(
-      (item) =>
-        normalizeName(
-          item.game
-        ) ===
-          targetGame &&
-        normalizeName(
-          item.type
-        ) ===
-          "individual outright" &&
-        normalizeName(
-          item.player1
-        ) ===
-          participantName
-    );
-
-  return (
-    playerMatch?.outrightOdds ||
-    ""
-  );
 }
 
 function teamIncludesPlayer(team, playerName) {
@@ -484,7 +253,7 @@ function PlayerSchedule() {
       allExtras,
       allOdds
     ) {
-      return games.map(
+      return scheduleGames.map(
         (game) => {
           if (
             captainGames.includes(
@@ -564,23 +333,6 @@ function PlayerSchedule() {
               decodedPlayerName,
               allOdds
             );
-          }
-
-          if (
-            game.name ===
-            "Unluckiest"
-          ) {
-            return {
-              game,
-              type: "special",
-              hasMatchup: false,
-              matchups: [
-                {
-                  label:
-                    "Determined by lowest Points Per Spin.",
-                },
-              ],
-            };
           }
 
           const matchups =
@@ -831,16 +583,25 @@ function PlayerSchedule() {
         return;
       }
 
-      if (
+      const cachedOdds =
+        getCachedValue(
+          ODDS_CACHE_KEY
+        ) || [];
+
+      const cachedOddsAreUsable =
         isCacheFresh(
           ODDS_CACHE_KEY,
           Infinity
-        )
+        ) &&
+        hasValidLiarsDiceOdds(
+          cachedOdds
+        );
+
+      if (
+        cachedOddsAreUsable
       ) {
         latestOdds =
-          getCachedValue(
-            ODDS_CACHE_KEY
-          ) || [];
+          cachedOdds;
 
         if (
           latestMatchups.length > 0 ||
@@ -880,6 +641,7 @@ function PlayerSchedule() {
             getOdds,
             {
               ttl: Infinity,
+              force: true,
               timeout:
                 REQUEST_TIMEOUT,
             }
@@ -1336,21 +1098,33 @@ function buildEliminationScheduleItem(
   playerName,
   odds
 ) {
-  const playerRows =
-    (
-      extras || []
-    ).filter(
-      (item) =>
-        normalizeName(
-          item.team1
-        ) ===
-        normalizeName(
-          playerName
-        )
+  const normalizedPlayer =
+    normalizeName(
+      playerName
     );
 
+  const playerGroups = [
+    ...new Set(
+      (extras || [])
+        .filter(
+          (item) =>
+            normalizeName(
+              item.team1
+            ) ===
+            normalizedPlayer
+        )
+        .map(
+          (item) =>
+            String(
+              item.type || ""
+            ).trim()
+        )
+        .filter(Boolean)
+    ),
+  ];
+
   if (
-    playerRows.length ===
+    playerGroups.length ===
     0
   ) {
     return {
@@ -1372,33 +1146,119 @@ function buildEliminationScheduleItem(
     hasMatchup: true,
 
     matchups:
-      playerRows.map(
-        (item) => {
+      playerGroups.map(
+        (groupName) => {
+          const groupRows =
+            (extras || [])
+              .filter(
+                (item) =>
+                  String(
+                    item.type || ""
+                  ).trim() ===
+                  groupName &&
+                  String(
+                    item.team1 || ""
+                  ).trim() !== ""
+              )
+              .sort(
+                (a, b) =>
+                  Number(
+                    a.number || 0
+                  ) -
+                  Number(
+                    b.number || 0
+                  )
+              );
+
+          const ownRow =
+            groupRows.find(
+              (item) =>
+                normalizeName(
+                  item.team1
+                ) ===
+                normalizedPlayer
+            );
+
           const finish =
             String(
-              item.team2 ||
+              ownRow?.team2 ||
                 ""
             ).trim();
 
+          const showOdds =
+            groupName ===
+              "Round 1 - Game 1" ||
+            groupName ===
+              "Round 1 - Game 2";
+
           return {
             label:
-              item.type,
+              getChamberScheduleTitle(
+                groupName
+              ),
 
             result:
               finish
                 ? `Finish: ${finish}`
                 : "Finish: TBD",
 
-            outrightOdds:
-              getOutrightOdds(
-                odds,
-                game.name,
-                playerName
+            participants:
+              groupRows.map(
+                (item) => ({
+                  name:
+                    String(
+                      item.team1 ||
+                        ""
+                    ).trim(),
+
+                  outrightOdds:
+                    showOdds
+                      ? getOutrightOdds(
+                          odds,
+                          game.name,
+                          item.team1
+                        )
+                      : "",
+                })
               ),
           };
         }
       ),
   };
+}
+
+function getChamberScheduleTitle(
+  groupName
+) {
+  if (
+    groupName ===
+    "Round 1 - Game 1"
+  ) {
+    return "Game 1";
+  }
+
+  if (
+    groupName ===
+    "Round 1 - Game 2"
+  ) {
+    return "Game 2";
+  }
+
+  if (
+    groupName ===
+    "Round 2 - Winners"
+  ) {
+    return "Winners Game";
+  }
+
+  if (
+    groupName ===
+    "Round 2 - Losers"
+  ) {
+    return "Losers Game";
+  }
+
+  return groupName;
 }
 
 function buildMatchupScheduleItem(
@@ -1571,7 +1431,7 @@ function ScheduleCard({
               "#ffffff",
 
             fontSize:
-              "17px",
+              "19px",
           }}
         >
           {item.game.icon}{" "}
@@ -1610,12 +1470,9 @@ function ScheduleCard({
           ) => (
             <MatchupDisplay
               key={`${item.game.id}-${index}`}
-              matchup={
-                matchup
-              }
-              muted={
-                !item.hasMatchup
-              }
+              matchup={matchup}
+              muted={!item.hasMatchup}
+              gameName={item.game.name}
             />
           )
         )}
@@ -1627,6 +1484,7 @@ function ScheduleCard({
 function MatchupDisplay({
   matchup,
   muted,
+  gameName,
 }) {
   if (
     !matchup.ownTeam
@@ -1657,7 +1515,7 @@ function MatchupDisplay({
               : "#ffffff",
 
             fontSize:
-              "14px",
+              "21px",
 
             fontWeight:
               muted
@@ -1667,6 +1525,56 @@ function MatchupDisplay({
         >
           {matchup.label}
         </div>
+
+        {matchup.participants &&
+          matchup.participants.length > 0 && (
+            <div
+              style={{
+                marginTop: "12px",
+                display: "grid",
+                gap: "7px",
+              }}
+            >
+              {matchup.participants.map(
+                (participant, participantIndex) => (
+                  <div
+                    key={`${participant.name}-${participantIndex}`}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: "10px",
+                      padding: "8px 10px",
+                      borderTop:
+                        participantIndex === 0
+                          ? "1px solid #30363d"
+                          : "none",
+                      color: "#ffffff",
+                      fontSize: "18px",
+                      fontWeight: "600",
+                    }}
+                  >
+                    <span>{participant.name}</span>
+
+                    {participant.outrightOdds && (
+                      <span
+                        style={{
+                          color: "#58a6ff",
+                          fontSize: "15px",
+                          fontWeight: "bold",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {formatAmericanOdds(
+                          participant.outrightOdds
+                        )}
+                      </span>
+                    )}
+                  </div>
+                )
+              )}
+            </div>
+          )}
 
         {matchup.result && (
           <div
@@ -1678,7 +1586,7 @@ function MatchupDisplay({
                 "6px",
 
               fontSize:
-                "13px",
+                "17px",
 
               fontWeight:
                 "bold",
@@ -1693,7 +1601,7 @@ function MatchupDisplay({
             style={{
               marginTop: "8px",
               color: "#58a6ff",
-              fontSize: "13px",
+              fontSize: "16px",
               fontWeight: "bold",
             }}
           >
@@ -1714,6 +1622,26 @@ function MatchupDisplay({
     matchup.winner ===
     "opponent";
 
+  const isRockPaperScissors =
+    gameName ===
+    "Rock Paper Scissors";
+
+  const ownResult =
+    ownWon
+      ? "WINNER"
+      : isRockPaperScissors &&
+          opponentWon
+        ? "LOSER"
+        : "";
+
+  const opponentResult =
+    opponentWon
+      ? "WINNER"
+      : isRockPaperScissors &&
+          ownWon
+        ? "LOSER"
+        : "";
+
   return (
     <div
       style={{
@@ -1727,7 +1655,7 @@ function MatchupDisplay({
           "10px",
 
         padding:
-          "12px 14px",
+          "14px 16px",
       }}
     >
       <div
@@ -1746,7 +1674,7 @@ function MatchupDisplay({
             "9px",
 
           padding:
-            "9px 10px",
+            "12px 10px",
 
           textAlign:
             "center",
@@ -1757,13 +1685,13 @@ function MatchupDisplay({
               : "#ffffff",
 
           fontSize:
-            "14px",
+            "21px",
 
           fontWeight:
             "bold",
 
           lineHeight:
-            1.45,
+            1.35,
         }}
       >
         {matchup.ownTeam}
@@ -1773,7 +1701,7 @@ function MatchupDisplay({
             style={{
               marginTop: "4px",
               color: "#58a6ff",
-              fontSize: "12px",
+              fontSize: "16px",
               fontWeight: "bold",
             }}
           >
@@ -1783,20 +1711,15 @@ function MatchupDisplay({
           </div>
         )}
 
-        {ownWon && (
+        {ownResult && (
           <div
             style={{
-              marginTop:
-                "4px",
-
-              fontSize:
-                "10px",
-
-              letterSpacing:
-                "0.5px",
+              marginTop: "4px",
+              fontSize: "12px",
+              letterSpacing: "0.5px",
             }}
           >
-            WINNER
+            {ownResult}
           </div>
         )}
       </div>
@@ -1810,13 +1733,13 @@ function MatchupDisplay({
             "#8b949e",
 
           fontSize:
-            "11px",
+            "15px",
 
           fontWeight:
             "bold",
 
           margin:
-            "8px 0",
+            "10px 0",
         }}
       >
         VS
@@ -1838,7 +1761,7 @@ function MatchupDisplay({
             "9px",
 
           padding:
-            "9px 10px",
+            "12px 10px",
 
           textAlign:
             "center",
@@ -1849,13 +1772,13 @@ function MatchupDisplay({
               : "#ffffff",
 
           fontSize:
-            "14px",
+            "21px",
 
           fontWeight:
             "bold",
 
           lineHeight:
-            1.45,
+            1.35,
         }}
       >
         {matchup.opponentTeam}
@@ -1865,7 +1788,7 @@ function MatchupDisplay({
             style={{
               marginTop: "4px",
               color: "#58a6ff",
-              fontSize: "12px",
+              fontSize: "16px",
               fontWeight: "bold",
             }}
           >
@@ -1875,53 +1798,49 @@ function MatchupDisplay({
           </div>
         )}
 
-        {opponentWon && (
+        {opponentResult && (
           <div
             style={{
-              marginTop:
-                "4px",
-
-              fontSize:
-                "10px",
-
-              letterSpacing:
-                "0.5px",
+              marginTop: "4px",
+              fontSize: "12px",
+              letterSpacing: "0.5px",
             }}
           >
-            WINNER
+            {opponentResult}
           </div>
         )}
       </div>
 
-      <div
-        style={{
-          marginTop:
-            "10px",
+      {!isRockPaperScissors && (
+        <div
+          style={{
+            marginTop:
+              "10px",
 
-          paddingTop:
-            "9px",
+            paddingTop:
+              "9px",
 
-          borderTop:
-            "1px solid #30363d",
+            borderTop:
+              "1px solid #30363d",
 
-          textAlign:
-            "center",
+            textAlign:
+              "center",
 
-          color:
-            matchup.score ===
-            "Score: TBD"
-              ? "#8b949e"
-              : "#f2cc60",
+            color:
+              matchup.score === "Score: TBD"
+                ? "#8b949e"
+                : "#f2cc60",
 
-          fontSize:
-            "13px",
+            fontSize:
+              "17px",
 
-          fontWeight:
-            "bold",
-        }}
-      >
-        {matchup.score}
-      </div>
+            fontWeight:
+              "bold",
+          }}
+        >
+          {matchup.score}
+        </div>
+      )}
     </div>
   );
 }

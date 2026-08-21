@@ -1100,7 +1100,7 @@ function Standings() {
                           color:
                             "#ffffff",
                           fontSize:
-                            "20px",
+                            "30px",
                         }}
                       >
                         {
@@ -1143,7 +1143,7 @@ function Standings() {
                             color:
                               "#f2cc60",
                             fontSize:
-                              "11px",
+                              "15px",
                             fontWeight:
                               "bold",
                             textTransform:
@@ -1161,7 +1161,7 @@ function Standings() {
                           color:
                             "#8b949e",
                           fontSize:
-                            "11px",
+                            "15px",
                           fontWeight:
                             "bold",
                           textAlign:

@@ -13,9 +13,13 @@ import { getPlacements } from "../services/placements";
 import { getCaptainGames } from "../services/captains";
 import { getGameExtras } from "../services/gameExtras";
 import { getGameStatuses } from "../services/gameStatus";
+import { getLiveData } from "../services/live";
 import {
   formatAmericanOdds,
+  getCaptainOdds,
+  getMatchupOdds,
   getOddsForGame,
+  getOutrightOdds,
 } from "../services/odds";
 import {
   getCachedData,
@@ -37,6 +41,21 @@ const EXTRAS_CACHE_KEY =
   "game-extras-all";
 const STATUSES_CACHE_KEY =
   "game-statuses";
+const LIVE_CACHE_KEY =
+  "standings-live";
+
+const PLACEMENT_GAMES = new Set([
+  "Fuck Yeah",
+  "Mouse Trap",
+  "Liars Dice",
+]);
+
+const CAPTAIN_GAMES = new Set([
+  "Flip Cup",
+  "Baseball",
+  "Relay Race",
+  "HR Derby",
+]);
 
 function normalizeGameName(value) {
   return String(value || "")
@@ -74,9 +93,9 @@ function findCaptainGame(
 }
 
 function wait(milliseconds) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, milliseconds);
-  });
+  return new Promise((resolve) =>
+    setTimeout(resolve, milliseconds)
+  );
 }
 
 function GameDetails() {
@@ -112,6 +131,13 @@ function GameDetails() {
   const [odds, setOdds] =
     useState([]);
 
+  const [live, setLive] =
+    useState(
+      getCachedValue(
+        LIVE_CACHE_KEY
+      ) || null
+    );
+
   const [loading, setLoading] =
     useState(true);
 
@@ -135,26 +161,13 @@ function GameDetails() {
   const gameIcon =
     game ? game.icon : "";
 
-  const placementGames = [
-    "Fuck Yeah",
-    "Mouse Trap",
-    "Liars Dice",
-  ];
-
-  const captainGames = [
-    "Flip Cup",
-    "Baseball",
-    "Relay Race",
-    "HR Derby",
-  ];
-
   const isPlacementGame =
-    placementGames.includes(
+    PLACEMENT_GAMES.has(
       gameName
     );
 
   const isCaptainGame =
-    captainGames.includes(
+    CAPTAIN_GAMES.has(
       gameName
     );
 
@@ -166,6 +179,10 @@ function GameDetails() {
     gameName ===
     "Elimination Chamber";
 
+  const isUnluckiest =
+    gameName ===
+    "Unluckiest";
+
   const mountedRef = useRef(true);
   const intervalRef = useRef(null);
   const requestInFlightRef = useRef(false);
@@ -176,8 +193,7 @@ function GameDetails() {
   const captainSnapshotRef = useRef("");
   const extrasSnapshotRef = useRef("");
   const statusesSnapshotRef = useRef("");
-
-  const oddsRef = useRef([]);
+  const liveSnapshotRef = useRef("");
 
   useEffect(() => {
     mountedRef.current = true;
@@ -245,6 +261,25 @@ function GameDetails() {
     }
 
     function applyCachedPrimaryData() {
+      if (isUnluckiest) {
+        const cachedLive =
+          getCachedValue(
+            LIVE_CACHE_KEY
+          );
+
+        if (cachedLive) {
+          updateIfChanged(
+            cachedLive,
+            liveSnapshotRef,
+            setLive
+          );
+
+          return true;
+        }
+
+        return false;
+      }
+
       if (isEliminationChamber) {
         const allExtras =
           getCachedValue(
@@ -375,11 +410,8 @@ function GameDetails() {
           return;
         }
 
-        oddsRef.current =
-          oddsData || [];
-
         setOdds(
-          oddsRef.current
+          oddsData || []
         );
       } catch (oddsError) {
         console.error(
@@ -513,6 +545,33 @@ function GameDetails() {
     }
 
     async function loadPrimaryData() {
+      if (isUnluckiest) {
+        const liveData =
+          await loadWithRetry(
+            LIVE_CACHE_KEY,
+            getLiveData,
+            {
+              ttl:
+                REFRESH_INTERVAL,
+              timeout:
+                REQUEST_TIMEOUT,
+              retry: true,
+            }
+          );
+
+        if (!mountedRef.current) {
+          return;
+        }
+
+        updateIfChanged(
+          liveData || null,
+          liveSnapshotRef,
+          setLive
+        );
+
+        return;
+      }
+
       if (isEliminationChamber) {
         const allExtras =
           await loadWithRetry(
@@ -677,7 +736,9 @@ function GameDetails() {
        * Both have their own cache/timeout behavior.
        */
       const leaderboardPromise =
-        loadLeaderboard();
+        isUnluckiest
+          ? Promise.resolve()
+          : loadLeaderboard();
 
       const statusPromise =
         loadStatuses();
@@ -757,11 +818,16 @@ function GameDetails() {
         )}`;
 
       const primaryFresh =
-        isEliminationChamber
+        isUnluckiest
           ? isCacheFresh(
-              EXTRAS_CACHE_KEY,
+              LIVE_CACHE_KEY,
               REFRESH_INTERVAL
             )
+          : isEliminationChamber
+            ? isCacheFresh(
+                EXTRAS_CACHE_KEY,
+                REFRESH_INTERVAL
+              )
           : isPlacementGame
             ? isCacheFresh(
                 PLACEMENTS_CACHE_KEY,
@@ -779,9 +845,12 @@ function GameDetails() {
 
       if (
         !primaryFresh ||
-        !isCacheFresh(
-          statsKey,
-          REFRESH_INTERVAL
+        (
+          !isUnluckiest &&
+          !isCacheFresh(
+            statsKey,
+            REFRESH_INTERVAL
+          )
         ) ||
         !isCacheFresh(
           STATUSES_CACHE_KEY,
@@ -829,7 +898,9 @@ function GameDetails() {
       /*
        * Static odds are always non-critical.
        */
-      loadOddsOnce();
+      if (!isUnluckiest) {
+        loadOddsOnce();
+      }
 
       await loadGame({
         showLoading: true,
@@ -876,6 +947,7 @@ function GameDetails() {
     isPlacementGame,
     isCaptainGame,
     isEliminationChamber,
+    isUnluckiest,
   ]);
 
   function getStatusDisplay(
@@ -1213,6 +1285,12 @@ function GameDetails() {
         </p>
       )}
 
+      {isUnluckiest && (
+        <UnluckiestSection
+          live={live}
+        />
+      )}
+
       {isCaptainGame &&
         captainGame && (
           <CaptainTeams
@@ -1267,36 +1345,140 @@ function GameDetails() {
       {!isPlacementGame &&
         !isCaptainGame &&
         !isEliminationChamber &&
-        matchups.length > 0 &&
-        (isRPS ? (
-          <RPSSection
-            matchups={
-              matchups
-            }
-            gameStatus={
-              gameStatus
-            }
-          />
-        ) : (
+        !isUnluckiest &&
+        matchups.length > 0 && (
           <MatchupSection
-            matchups={
-              matchups
-            }
-            gameStatus={
-              gameStatus
-            }
+            matchups={matchups}
+            gameStatus={gameStatus}
             getStatusDisplay={
               getStatusDisplay
             }
             odds={odds}
+            gameName={gameName}
+            isRPS={isRPS}
           />
-        ))}
+        )}
 
-      <GameLeaderboard
-        gameData={gameData}
-      />
+      {!isUnluckiest && (
+        <GameLeaderboard
+          gameData={gameData}
+        />
+      )}
     </div>
   );
+}
+
+function UnluckiestSection({
+  live,
+}) {
+  const player =
+    live?.[
+      "Unluckiest Player"
+    ] || "TBD";
+
+  const pps =
+    formatPPS(
+      live?.["Lowest PPS"]
+    );
+
+  return (
+    <div
+      style={{
+        backgroundColor:
+          "#161b22",
+        border:
+          "1px solid #30363d",
+        borderRadius:
+          "16px",
+        padding:
+          "24px 18px",
+        marginBottom:
+          "24px",
+        textAlign:
+          "center",
+      }}
+    >
+      <div
+        style={{
+          color:
+            "#8b949e",
+          fontSize:
+            "15px",
+          fontWeight:
+            "bold",
+          marginBottom:
+            "10px",
+        }}
+      >
+        ☘️ Current Unluckiest
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent:
+            "center",
+          alignItems:
+            "baseline",
+          gap: "8px",
+          marginBottom:
+            "8px",
+        }}
+      >
+        <strong
+          style={{
+            color: "#ffffff",
+            fontSize: "34px",
+            lineHeight: 1,
+          }}
+        >
+          {pps}
+        </strong>
+
+        <span
+          style={{
+            color:
+              "#8b949e",
+            fontSize:
+              "13px",
+            fontWeight:
+              "bold",
+          }}
+        >
+          PPS
+        </span>
+      </div>
+
+      <strong
+        style={{
+          display: "block",
+          color: "#ffffff",
+          fontSize: "22px",
+        }}
+      >
+        {player}
+      </strong>
+    </div>
+  );
+}
+
+function formatPPS(value) {
+  const number =
+    Number(value);
+
+  if (
+    Number.isNaN(number)
+  ) {
+    return "0";
+  }
+
+  if (
+    Number.isInteger(number)
+  ) {
+    return number.toString();
+  }
+
+  return number.toFixed(3);
 }
 
 function getOrdinalSuffix(
@@ -1386,227 +1568,6 @@ function normalizeName(
     );
 }
 
-function normalizeTeam(
-  value
-) {
-  return String(
-    value || ""
-  )
-    .split(
-      /\s*\/\s*|\s*,\s*|\s*&\s*/
-    )
-    .map(
-      normalizeName
-    )
-    .filter(Boolean)
-    .sort()
-    .join("|");
-}
-
-function getMatchupOdds(
-  odds,
-  team1,
-  team2
-) {
-  const firstTeam =
-    normalizeTeam(
-      team1
-    );
-
-  const secondTeam =
-    normalizeTeam(
-      team2
-    );
-
-  const direct =
-    (odds || []).find(
-      (item) =>
-        item.type ===
-          "Matchup" &&
-        normalizeTeam(
-          item.team1
-        ) === firstTeam &&
-        normalizeTeam(
-          item.team2
-        ) === secondTeam
-    );
-
-  if (direct) {
-    return {
-      odds1:
-        direct.odds1,
-
-      odds2:
-        direct.odds2,
-    };
-  }
-
-  const reversed =
-    (odds || []).find(
-      (item) =>
-        item.type ===
-          "Matchup" &&
-        normalizeTeam(
-          item.team1
-        ) === secondTeam &&
-        normalizeTeam(
-          item.team2
-        ) === firstTeam
-    );
-
-  if (reversed) {
-    return {
-      odds1:
-        reversed.odds2,
-
-      odds2:
-        reversed.odds1,
-    };
-  }
-
-  return {
-    odds1: "",
-    odds2: "",
-  };
-}
-
-function getCaptainOdds(
-  odds,
-  captain1,
-  captain2
-) {
-  const direct =
-    (odds || []).find(
-      (item) =>
-        item.type ===
-          "Matchup" &&
-        normalizeName(
-          item.team1
-        ) ===
-          normalizeName(
-            captain1
-          ) &&
-        normalizeName(
-          item.team2
-        ) ===
-          normalizeName(
-            captain2
-          )
-    );
-
-  if (direct) {
-    return {
-      odds1:
-        direct.odds1,
-
-      odds2:
-        direct.odds2,
-    };
-  }
-
-  const reversed =
-    (odds || []).find(
-      (item) =>
-        item.type ===
-          "Matchup" &&
-        normalizeName(
-          item.team1
-        ) ===
-          normalizeName(
-            captain2
-          ) &&
-        normalizeName(
-          item.team2
-        ) ===
-          normalizeName(
-            captain1
-          )
-    );
-
-  if (reversed) {
-    return {
-      odds1:
-        reversed.odds2,
-
-      odds2:
-        reversed.odds1,
-    };
-  }
-
-  return {
-    odds1: "",
-    odds2: "",
-  };
-}
-
-function getOutrightOdds(
-  odds,
-  participant
-) {
-  const participantTeam =
-    normalizeTeam(
-      participant
-    );
-
-  const participantName =
-    normalizeName(
-      participant
-    );
-
-  const teamMatch =
-    (odds || []).find(
-      (item) => {
-        if (
-          item.type !==
-          "Team Outright"
-        ) {
-          return false;
-        }
-
-        const sourceTeam =
-          normalizeTeam(
-            [
-              item.player1,
-              item.player2,
-            ]
-              .filter(
-                Boolean
-              )
-              .join(
-                " / "
-              )
-          );
-
-        return (
-          sourceTeam ===
-          participantTeam
-        );
-      }
-    );
-
-  if (teamMatch) {
-    return (
-      teamMatch.outrightOdds
-    );
-  }
-
-  const playerMatch =
-    (odds || []).find(
-      (item) =>
-        item.type ===
-          "Individual Outright" &&
-        normalizeName(
-          item.player1
-        ) ===
-          participantName
-    );
-
-  return (
-    playerMatch
-      ?.outrightOdds ||
-    ""
-  );
-}
 
 function getWinnerSide(
   score1,
@@ -1773,6 +1734,7 @@ function CaptainTeams({
   const captainOdds =
     getCaptainOdds(
       odds,
+      gameName,
       captainGame.captain1,
       captainGame.captain2
     );
@@ -2949,11 +2911,20 @@ function EliminationChamberSection({
                     return null;
                   }
 
+                  const showOdds =
+                    groupName ===
+                      "Round 1 - Game 1" ||
+                    groupName ===
+                      "Round 1 - Game 2";
+
                   const playerOdds =
-                    getOutrightOdds(
-                      odds,
-                      player
-                    );
+                    showOdds
+                      ? getOutrightOdds(
+                          odds,
+                          "Elimination Chamber",
+                          player
+                        )
+                      : "";
 
                   return (
                     <div
@@ -3067,6 +3038,7 @@ function PlacementSection({
   placements,
   gameStatus,
   getPlaceLabel,
+  gameName,
   odds,
 }) {
   return (
@@ -3111,6 +3083,7 @@ function PlacementSection({
           const outright =
             getOutrightOdds(
               odds,
+              gameName,
               placement.team
             );
 
@@ -3183,314 +3156,41 @@ function PlacementSection({
   );
 }
 
-function RPSSection({
-  matchups,
-  gameStatus,
-}) {
-  return (
-    <div
-      style={{
-        backgroundColor:
-          "#161b22",
-
-        border:
-          gameStatus.text ===
-          "● LIVE"
-            ? "1px solid #3fb950"
-            : "1px solid #30363d",
-
-        borderRadius:
-          "16px",
-
-        padding:
-          "18px",
-
-        marginBottom:
-          "24px",
-      }}
-    >
-      <h2
-        style={{
-          marginTop: 0,
-
-          textAlign:
-            "center",
-
-          color: "white",
-        }}
-      >
-        ✊ Matchups
-      </h2>
-
-      {matchups.map(
-        (
-          matchup,
-          index
-        ) => {
-          const result1 =
-            String(
-              matchup.score1 ||
-                ""
-            )
-              .trim()
-              .toUpperCase();
-
-          const result2 =
-            String(
-              matchup.score2 ||
-                ""
-            )
-              .trim()
-              .toUpperCase();
-
-          const player1Won =
-            result1 ===
-            "W";
-
-          const player2Won =
-            result2 ===
-            "W";
-
-          const player1Lost =
-            result1 ===
-            "L";
-
-          const player2Lost =
-            result2 ===
-            "L";
-
-          return (
-            <div
-              key={`${matchup.team1}-${matchup.team2}-${index}`}
-              style={{
-                backgroundColor:
-                  "#21262d",
-
-                borderRadius:
-                  "14px",
-
-                padding:
-                  "16px",
-
-                marginBottom:
-                  index ===
-                  matchups.length -
-                    1
-                    ? "0"
-                    : "12px",
-              }}
-            >
-              <div
-                style={{
-                  display:
-                    "grid",
-
-                  gridTemplateColumns:
-                    "1fr 60px 1fr",
-
-                  alignItems:
-                    "center",
-
-                  gap: "8px",
-                }}
-              >
-                <div
-                  style={{
-                    textAlign:
-                      "center",
-
-                    opacity:
-                      player1Lost
-                        ? 0.5
-                        : 1,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize:
-                        "24px",
-
-                      minHeight:
-                        "30px",
-                    }}
-                  >
-                    {player1Won
-                      ? "🏆"
-                      : ""}
-                  </div>
-
-                  <strong
-                    style={{
-                      fontSize:
-                        "17px",
-
-                      color:
-                        player1Won
-                          ? "#3fb950"
-                          : "white",
-                    }}
-                  >
-                    {
-                      matchup.team1
-                    }
-                  </strong>
-
-                  {player1Won && (
-                    <div
-                      style={{
-                        marginTop:
-                          "6px",
-
-                        fontSize:
-                          "11px",
-
-                        fontWeight:
-                          "bold",
-
-                        color:
-                          "#3fb950",
-                      }}
-                    >
-                      WINNER
-                    </div>
-                  )}
-                </div>
-
-                <div
-                  style={{
-                    textAlign:
-                      "center",
-
-                    color:
-                      "#8b949e",
-
-                    fontWeight:
-                      "bold",
-                  }}
-                >
-                  VS
-                </div>
-
-                <div
-                  style={{
-                    textAlign:
-                      "center",
-
-                    opacity:
-                      player2Lost
-                        ? 0.5
-                        : 1,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize:
-                        "24px",
-
-                      minHeight:
-                        "30px",
-                    }}
-                  >
-                    {player2Won
-                      ? "🏆"
-                      : ""}
-                  </div>
-
-                  <strong
-                    style={{
-                      fontSize:
-                        "17px",
-
-                      color:
-                        player2Won
-                          ? "#3fb950"
-                          : "white",
-                    }}
-                  >
-                    {
-                      matchup.team2
-                    }
-                  </strong>
-
-                  {player2Won && (
-                    <div
-                      style={{
-                        marginTop:
-                          "6px",
-
-                        fontSize:
-                          "11px",
-
-                        fontWeight:
-                          "bold",
-
-                        color:
-                          "#3fb950",
-                      }}
-                    >
-                      WINNER
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        }
-      )}
-    </div>
-  );
-}
-
 function MatchupSection({
   matchups,
   gameStatus,
   getStatusDisplay,
   odds,
+  gameName,
+  isRPS = false,
 }) {
   return (
     <div
       style={{
-        backgroundColor:
-          "#161b22",
-
+        backgroundColor: "#161b22",
         border:
-          gameStatus.text ===
-          "● LIVE"
+          gameStatus.text === "● LIVE"
             ? "1px solid #3fb950"
             : "1px solid #30363d",
-
-        borderRadius:
-          "16px",
-
+        borderRadius: "16px",
         padding: "18px",
-
-        marginBottom:
-          "24px",
+        marginBottom: "24px",
       }}
     >
       <h2
         style={{
           marginTop: 0,
-
-          textAlign:
-            "center",
-
+          textAlign: "center",
           color: "white",
         }}
       >
-        🤝 Matchups
+        {isRPS
+          ? "✊ Matchups"
+          : "🤝 Matchups"}
       </h2>
 
       {matchups.map(
-        (
-          matchup,
-          index
-        ) => {
-          const status =
-            getStatusDisplay(
-              matchup.status
-            );
-
+        (matchup, index) => {
           const winnerSide =
             getWinnerSide(
               matchup.score1,
@@ -3503,12 +3203,31 @@ function MatchupSection({
           const team2Won =
             winnerSide === 2;
 
+          const team1Lost =
+            isRPS && team2Won;
+
+          const team2Lost =
+            isRPS && team1Won;
+
+          const status =
+            isRPS
+              ? null
+              : getStatusDisplay(
+                  matchup.status
+                );
+
           const matchupOdds =
-            getMatchupOdds(
-              odds,
-              matchup.team1,
-              matchup.team2
-            );
+            isRPS
+              ? {
+                  odds1: "",
+                  odds2: "",
+                }
+              : getMatchupOdds(
+                  odds,
+                  gameName,
+                  matchup.team1,
+                  matchup.team2
+                );
 
           return (
             <div
@@ -3516,242 +3235,196 @@ function MatchupSection({
               style={{
                 backgroundColor:
                   "#21262d",
-
-                borderRadius:
-                  "14px",
-
-                padding:
-                  "16px",
-
+                borderRadius: "14px",
+                padding: "16px",
                 marginBottom:
                   index ===
-                  matchups.length -
-                    1
+                  matchups.length - 1
                     ? "0"
                     : "12px",
               }}
             >
               <div
                 style={{
-                  display:
-                    "grid",
-
+                  display: "grid",
                   gridTemplateColumns:
-                    "1fr 70px 1fr",
-
+                    isRPS
+                      ? "1fr 60px 1fr"
+                      : "1fr 70px 1fr",
                   alignItems:
-                    "stretch",
-
+                    isRPS
+                      ? "center"
+                      : "stretch",
                   gap: "8px",
                 }}
               >
-                <div
-                  style={{
-                    textAlign:
-                      "center",
-
-                    backgroundColor:
-                      team1Won
-                        ? "rgba(46, 160, 67, 0.14)"
-                        : "transparent",
-
-                    border:
-                      team1Won
-                        ? "1px solid #3fb950"
-                        : "1px solid transparent",
-
-                    borderRadius:
-                      "10px",
-
-                    padding:
-                      "10px 6px",
-                  }}
-                >
-                  <strong
-                    style={{
-                      color:
-                        team1Won
-                          ? "#3fb950"
-                          : "white",
-                    }}
-                  >
-                    {
-                      matchup.team1
-                    }
-                  </strong>
-
-                  <OddsValue
-                    value={
-                      matchupOdds.odds1
-                    }
-                  />
-
-                  <div
-                    style={{
-                      fontSize:
-                        "28px",
-
-                      marginTop:
-                        "4px",
-
-                      color:
-                        team1Won
-                          ? "#3fb950"
-                          : "white",
-                    }}
-                  >
-                    {matchup.score1 ||
-                      "-"}
-                  </div>
-
-                  {team1Won && (
-                    <div
-                      style={{
-                        marginTop:
-                          "4px",
-
-                        color:
-                          "#3fb950",
-
-                        fontSize:
-                          "10px",
-
-                        fontWeight:
-                          "bold",
-                      }}
-                    >
-                      WINNER
-                    </div>
-                  )}
-                </div>
+                <MatchupSide
+                  name={matchup.team1}
+                  score={matchup.score1}
+                  odds={matchupOdds.odds1}
+                  won={team1Won}
+                  lost={team1Lost}
+                  isRPS={isRPS}
+                />
 
                 <div
                   style={{
-                    textAlign:
-                      "center",
-
-                    display:
-                      "flex",
-
+                    textAlign: "center",
+                    display: "flex",
                     flexDirection:
                       "column",
-
                     justifyContent:
                       "center",
+                    color: "#8b949e",
+                    fontWeight: "bold",
                   }}
                 >
-                  <strong
-                    style={{
-                      color:
-                        "#8b949e",
-                    }}
-                  >
-                    VS
-                  </strong>
+                  <strong>VS</strong>
 
-                  <div
-                    style={{
-                      marginTop:
-                        "18px",
-
-                      color:
-                        status.color,
-
-                      fontSize:
-                        "12px",
-
-                      fontWeight:
-                        "bold",
-                    }}
-                  >
-                    {status.text}
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    textAlign:
-                      "center",
-
-                    backgroundColor:
-                      team2Won
-                        ? "rgba(46, 160, 67, 0.14)"
-                        : "transparent",
-
-                    border:
-                      team2Won
-                        ? "1px solid #3fb950"
-                        : "1px solid transparent",
-
-                    borderRadius:
-                      "10px",
-
-                    padding:
-                      "10px 6px",
-                  }}
-                >
-                  <strong
-                    style={{
-                      color:
-                        team2Won
-                          ? "#3fb950"
-                          : "white",
-                    }}
-                  >
-                    {
-                      matchup.team2
-                    }
-                  </strong>
-
-                  <OddsValue
-                    value={
-                      matchupOdds.odds2
-                    }
-                  />
-
-                  <div
-                    style={{
-                      fontSize:
-                        "28px",
-
-                      marginTop:
-                        "4px",
-
-                      color:
-                        team2Won
-                          ? "#3fb950"
-                          : "white",
-                    }}
-                  >
-                    {matchup.score2 ||
-                      "-"}
-                  </div>
-
-                  {team2Won && (
+                  {!isRPS && (
                     <div
                       style={{
-                        marginTop:
-                          "4px",
-
+                        marginTop: "18px",
                         color:
-                          "#3fb950",
-
-                        fontSize:
-                          "10px",
-
+                          status.color,
+                        fontSize: "12px",
                         fontWeight:
                           "bold",
                       }}
                     >
-                      WINNER
+                      {status.text}
                     </div>
                   )}
                 </div>
+
+                <MatchupSide
+                  name={matchup.team2}
+                  score={matchup.score2}
+                  odds={matchupOdds.odds2}
+                  won={team2Won}
+                  lost={team2Lost}
+                  isRPS={isRPS}
+                />
               </div>
             </div>
           );
         }
       )}
+    </div>
+  );
+}
+
+function MatchupSide({
+  name,
+  score,
+  odds,
+  won,
+  lost,
+  isRPS,
+}) {
+  if (isRPS) {
+    return (
+      <div
+        style={{
+          textAlign: "center",
+          opacity: lost
+            ? 0.5
+            : 1,
+        }}
+      >
+        <div
+          style={{
+            fontSize: "24px",
+            minHeight: "30px",
+          }}
+        >
+          {won ? "🏆" : ""}
+        </div>
+
+        <strong
+          style={{
+            fontSize: "17px",
+            color: won
+              ? "#3fb950"
+              : "white",
+          }}
+        >
+          {name}
+        </strong>
+
+        {won && (
+          <WinnerLabel />
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        textAlign: "center",
+        backgroundColor:
+          won
+            ? "rgba(46, 160, 67, 0.14)"
+            : "transparent",
+        border:
+          won
+            ? "1px solid #3fb950"
+            : "1px solid transparent",
+        borderRadius: "10px",
+        padding: "10px 6px",
+      }}
+    >
+      <strong
+        style={{
+          color: won
+            ? "#3fb950"
+            : "white",
+        }}
+      >
+        {name}
+      </strong>
+
+      <OddsValue value={odds} />
+
+      <div
+        style={{
+          fontSize: "28px",
+          marginTop: "4px",
+          color: won
+            ? "#3fb950"
+            : "white",
+        }}
+      >
+        {score || "-"}
+      </div>
+
+      {won && (
+        <WinnerLabel compact />
+      )}
+    </div>
+  );
+}
+
+function WinnerLabel({
+  compact = false,
+}) {
+  return (
+    <div
+      style={{
+        marginTop:
+          compact
+            ? "4px"
+            : "6px",
+        color: "#3fb950",
+        fontSize:
+          compact
+            ? "10px"
+            : "11px",
+        fontWeight: "bold",
+      }}
+    >
+      WINNER
     </div>
   );
 }
