@@ -736,9 +736,7 @@ function GameDetails() {
        * Both have their own cache/timeout behavior.
        */
       const leaderboardPromise =
-        isUnluckiest
-          ? Promise.resolve()
-          : loadLeaderboard();
+        loadLeaderboard();
 
       const statusPromise =
         loadStatuses();
@@ -845,12 +843,9 @@ function GameDetails() {
 
       if (
         !primaryFresh ||
-        (
-          !isUnluckiest &&
-          !isCacheFresh(
-            statsKey,
-            REFRESH_INTERVAL
-          )
+        !isCacheFresh(
+          statsKey,
+          REFRESH_INTERVAL
         ) ||
         !isCacheFresh(
           STATUSES_CACHE_KEY,
