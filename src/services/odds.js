@@ -1,45 +1,28 @@
+import {
+  getCachedData,
+} from "../utils/dataCache";
+
+import {
+  cleanCsvValue,
+  fetchCsvRows,
+} from "./csv";
+
 const ODDS_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vRIeHL18j-kihduE5ChG91aJOdcFo78J7BjYJscs142FBzCT13WkrCT08B-h4KMY6ODVezjvn1H31iH/pub?gid=1015029653&single=true&output=csv";
 
-function parseCsvLine(line) {
-  const values = [];
-  let current = "";
-  let insideQuotes = false;
+const ODDS_CACHE_KEY =
+  "source:odds";
 
-  for (let i = 0; i < line.length; i++) {
-    const character = line[i];
+const ODDS_TTL =
+  300000;
 
-    if (character === '"') {
-      if (
-        insideQuotes &&
-        line[i + 1] === '"'
-      ) {
-        current += '"';
-        i++;
-      } else {
-        insideQuotes =
-          !insideQuotes;
-      }
-    } else if (
-      character === "," &&
-      !insideQuotes
-    ) {
-      values.push(current);
-      current = "";
-    } else {
-      current += character;
-    }
-  }
-
-  values.push(current);
-
-  return values;
-}
+const REQUEST_TIMEOUT =
+  8000;
 
 function clean(value) {
-  return String(
-    value ?? ""
-  ).trim();
+  return cleanCsvValue(
+    value
+  );
 }
 
 function normalizeText(value) {
@@ -77,73 +60,83 @@ function isGameMatch(
   );
 }
 
-export async function getOdds() {
-  const separator =
-    ODDS_URL.includes("?")
-      ? "&"
-      : "?";
-
-  const response = await fetch(
-    `${ODDS_URL}${separator}cache=${Date.now()}`,
-    {
-      cache: "no-store",
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error(
+async function loadOdds() {
+  const rows =
+    await fetchCsvRows(
+      ODDS_URL,
       "Unable to load odds."
     );
-  }
-
-  const csv =
-    await response.text();
-
-  if (!csv.trim()) {
-    return [];
-  }
-
-  const rows = csv
-    .trim()
-    .split(/\r?\n/)
-    .map(parseCsvLine);
-
-  rows.shift();
 
   return rows
     .filter(
       (row) =>
-        clean(row[0]) &&
-        clean(row[1])
+        clean(
+          row[0]
+        ) &&
+        clean(
+          row[1]
+        )
     )
     .map((row) => ({
       type:
-        clean(row[0]),
+        clean(
+          row[0]
+        ),
 
       game:
-        clean(row[1]),
+        clean(
+          row[1]
+        ),
 
       team1:
-        clean(row[2]),
+        clean(
+          row[2]
+        ),
 
       team2:
-        clean(row[3]),
+        clean(
+          row[3]
+        ),
 
       odds1:
-        clean(row[4]),
+        clean(
+          row[4]
+        ),
 
       odds2:
-        clean(row[5]),
+        clean(
+          row[5]
+        ),
 
       player1:
-        clean(row[6]),
+        clean(
+          row[6]
+        ),
 
       player2:
-        clean(row[7]),
+        clean(
+          row[7]
+        ),
 
       outrightOdds:
-        clean(row[8]),
+        clean(
+          row[8]
+        ),
     }));
+}
+
+export async function getOdds() {
+  return getCachedData(
+    ODDS_CACHE_KEY,
+    loadOdds,
+    {
+      ttl:
+        ODDS_TTL,
+
+      timeout:
+        REQUEST_TIMEOUT,
+    }
+  );
 }
 
 export async function getOddsForGame(
@@ -168,10 +161,14 @@ export function getMatchupOdds(
   team2
 ) {
   const firstTeam =
-    normalizeTeam(team1);
+    normalizeTeam(
+      team1
+    );
 
   const secondTeam =
-    normalizeTeam(team2);
+    normalizeTeam(
+      team2
+    );
 
   const matchupOdds =
     (odds || []).filter(
@@ -203,6 +200,7 @@ export function getMatchupOdds(
     return {
       odds1:
         direct.odds1,
+
       odds2:
         direct.odds2,
     };
@@ -225,6 +223,7 @@ export function getMatchupOdds(
     return {
       odds1:
         reversed.odds2,
+
       odds2:
         reversed.odds1,
     };
@@ -243,10 +242,14 @@ export function getCaptainOdds(
   captain2
 ) {
   const firstCaptain =
-    normalizeText(captain1);
+    normalizeText(
+      captain1
+    );
 
   const secondCaptain =
-    normalizeText(captain2);
+    normalizeText(
+      captain2
+    );
 
   const matchupOdds =
     (odds || []).filter(
@@ -278,6 +281,7 @@ export function getCaptainOdds(
     return {
       odds1:
         direct.odds1,
+
       odds2:
         direct.odds2,
     };
@@ -300,6 +304,7 @@ export function getCaptainOdds(
     return {
       odds1:
         reversed.odds2,
+
       odds2:
         reversed.odds1,
     };
@@ -442,22 +447,34 @@ export function formatAmericanOdds(
   value
 ) {
   const raw =
-    clean(value);
+    clean(
+      value
+    );
 
   if (!raw) {
     return "";
   }
 
   const number =
-    Number(raw);
+    Number(
+      raw
+    );
 
-  if (Number.isNaN(number)) {
+  if (
+    Number.isNaN(
+      number
+    )
+  ) {
     return raw;
   }
 
-  if (number > 0) {
+  if (
+    number > 0
+  ) {
     return `+${number}`;
   }
 
-  return String(number);
+  return String(
+    number
+  );
 }

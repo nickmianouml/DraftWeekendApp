@@ -1,53 +1,18 @@
+import {
+  cleanCsvValue,
+  fetchCsvRows,
+} from "./csv";
+
 const ALL_TIME_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vRIeHL18j-kihduE5ChG91aJOdcFo78J7BjYJscs142FBzCT13WkrCT08B-h4KMY6ODVezjvn1H31iH/pub?gid=1700532631&single=true&output=csv";
 
-function parseCsvLine(line) {
-  const values = [];
-  let current = "";
-  let insideQuotes = false;
-
-  for (
-    let index = 0;
-    index < line.length;
-    index += 1
-  ) {
-    const character =
-      line[index];
-
-    if (character === '"') {
-      if (
-        insideQuotes &&
-        line[index + 1] === '"'
-      ) {
-        current += '"';
-        index += 1;
-      } else {
-        insideQuotes =
-          !insideQuotes;
-      }
-    } else if (
-      character === "," &&
-      !insideQuotes
-    ) {
-      values.push(current);
-      current = "";
-    } else {
-      current += character;
-    }
-  }
-
-  values.push(current);
-
-  return values;
-}
-
 function parseNumber(value) {
-  const cleaned = String(
-    value ?? ""
-  )
-    .trim()
-    .replace(/,/g, "")
-    .replace(/%/g, "");
+  const cleaned =
+    cleanCsvValue(
+      value
+    )
+      .replace(/,/g, "")
+      .replace(/%/g, "");
 
   if (!cleaned) {
     return 0;
@@ -56,15 +21,18 @@ function parseNumber(value) {
   const number =
     Number(cleaned);
 
-  return Number.isNaN(number)
+  return Number.isNaN(
+    number
+  )
     ? 0
     : number;
 }
 
 function parsePercent(value) {
-  const raw = String(
-    value ?? ""
-  ).trim();
+  const raw =
+    cleanCsvValue(
+      value
+    );
 
   if (!raw) {
     return 0;
@@ -73,11 +41,15 @@ function parsePercent(value) {
   const number =
     parseNumber(raw);
 
-  if (raw.includes("%")) {
+  if (
+    raw.includes("%")
+  ) {
     return number / 100;
   }
 
-  if (number > 1) {
+  if (
+    number > 1
+  ) {
     return number / 100;
   }
 
@@ -87,13 +59,19 @@ function parsePercent(value) {
 function normalizeRow(row) {
   return {
     type:
-      row.Type || "",
+      cleanCsvValue(
+        row.Type
+      ),
 
     player:
-      row.Player || "",
+      cleanCsvValue(
+        row.Player
+      ),
 
     game:
-      row.Game || "",
+      cleanCsvValue(
+        row.Game
+      ),
 
     years:
       parseNumber(
@@ -186,41 +164,24 @@ function normalizeRow(row) {
       ),
 
     notes:
-      row.Notes || "",
+      cleanCsvValue(
+        row.Notes
+      ),
   };
 }
 
 export async function getAllTimeData() {
-  const separator =
-    ALL_TIME_URL.includes("?")
-      ? "&"
-      : "?";
-
-  const response =
-    await fetch(
-      `${ALL_TIME_URL}${separator}cache=${Date.now()}`,
+  const rows =
+    await fetchCsvRows(
+      ALL_TIME_URL,
+      "Unable to load all-time statistics.",
       {
-        cache: "no-store",
+        includeHeader: true,
       }
     );
 
-  if (!response.ok) {
-    throw new Error(
-      "Unable to load all-time statistics."
-    );
-  }
-
-  const csv =
-    await response.text();
-
-  const lines =
-    csv
-      .trim()
-      .split(/\r?\n/)
-      .filter(Boolean);
-
   if (
-    lines.length === 0
+    rows.length === 0
   ) {
     return {
       overall: [],
@@ -230,35 +191,33 @@ export async function getAllTimeData() {
   }
 
   const headers =
-    parseCsvLine(
-      lines[0]
-    ).map(
-      (header) =>
-        header.trim()
+    rows[0].map(
+      cleanCsvValue
     );
 
-  const rows =
-    lines
+  const data =
+    rows
       .slice(1)
-      .map(parseCsvLine)
-      .map((values) => {
-        const row = {};
+      .map(
+        (values) => {
+          const row = {};
 
-        headers.forEach(
-          (
-            header,
-            index
-          ) => {
-            row[header] =
-              values[index] ??
-              "";
-          }
-        );
+          headers.forEach(
+            (
+              header,
+              index
+            ) => {
+              row[header] =
+                values[index] ??
+                "";
+            }
+          );
 
-        return normalizeRow(
-          row
-        );
-      })
+          return normalizeRow(
+            row
+          );
+        }
+      )
       .filter(
         (row) =>
           row.player
@@ -266,21 +225,21 @@ export async function getAllTimeData() {
 
   return {
     overall:
-      rows.filter(
+      data.filter(
         (row) =>
           row.type ===
           "Overall"
       ),
 
     games:
-      rows.filter(
+      data.filter(
         (row) =>
           row.type ===
           "Game"
       ),
 
     specials:
-      rows.filter(
+      data.filter(
         (row) =>
           row.type ===
           "Special"

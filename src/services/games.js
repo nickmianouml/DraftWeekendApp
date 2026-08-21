@@ -1,82 +1,113 @@
+import {
+  getCachedData,
+} from "../utils/dataCache";
+
+import {
+  cleanCsvValue,
+  fetchCsvRows,
+  normalizeCsvValue,
+} from "./csv";
+
 const PLAYER_GAMES_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vRIeHL18j-kihduE5ChG91aJOdcFo78J7BjYJscs142FBzCT13WkrCT08B-h4KMY6ODVezjvn1H31iH/pub?gid=40128446&single=true&output=csv";
 
-function parseCsvLine(line) {
-  const values = [];
-  let current = "";
-  let insideQuotes = false;
+const PLAYER_GAMES_CACHE_KEY =
+  "source:player-games";
 
-  for (let i = 0; i < line.length; i++) {
-    const character = line[i];
+const SOURCE_TTL =
+  10000;
 
-    if (character === '"') {
-      if (insideQuotes && line[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else {
-        insideQuotes = !insideQuotes;
-      }
-    } else if (character === "," && !insideQuotes) {
-      values.push(current);
-      current = "";
-    } else {
-      current += character;
-    }
-  }
+const REQUEST_TIMEOUT =
+  8000;
 
-  values.push(current);
-
-  return values;
-}
-
-export async function getGamesData() {
-  const separator =
-    PLAYER_GAMES_URL.includes("?") ? "&" : "?";
-
-  const response = await fetch(
-    `${PLAYER_GAMES_URL}${separator}cache=${Date.now()}`,
-    {
-      cache: "no-store",
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error("Unable to load game data.");
-  }
-
-  const csv = await response.text();
-
-  const rows = csv
-    .trim()
-    .split(/\r?\n/)
-    .map(parseCsvLine);
-
-  rows.shift();
+async function loadGamesData() {
+  const rows =
+    await fetchCsvRows(
+      PLAYER_GAMES_URL,
+      "Unable to load game data."
+    );
 
   return rows
     .filter(
       (row) =>
         row.length >= 5 &&
-        row[0] &&
-        row[1]
+        cleanCsvValue(
+          row[0]
+        ) &&
+        cleanCsvValue(
+          row[1]
+        )
     )
     .map((row) => ({
-      player: row[0].trim(),
-      game: row[1].trim(),
-      spins: Number(row[2]) || 0,
-      spinValue: Number(row[3]) || 0,
-      points: Number(row[4]) || 0,
+      player:
+        cleanCsvValue(
+          row[0]
+        ),
+
+      game:
+        cleanCsvValue(
+          row[1]
+        ),
+
+      spins:
+        Number(
+          cleanCsvValue(
+            row[2]
+          )
+        ) || 0,
+
+      spinValue:
+        Number(
+          cleanCsvValue(
+            row[3]
+          )
+        ) || 0,
+
+      points:
+        Number(
+          cleanCsvValue(
+            row[4]
+          )
+        ) || 0,
     }));
 }
 
-export async function getGameData(gameName) {
-  const games = await getGamesData();
+export async function getGamesData() {
+  return getCachedData(
+    PLAYER_GAMES_CACHE_KEY,
+    loadGamesData,
+    {
+      ttl:
+        SOURCE_TTL,
+
+      timeout:
+        REQUEST_TIMEOUT,
+    }
+  );
+}
+
+export async function getGameData(
+  gameName
+) {
+  const games =
+    await getGamesData();
+
+  const targetGame =
+    normalizeCsvValue(
+      gameName
+    );
 
   return games
     .filter(
       (row) =>
-        row.game.toLowerCase() ===
-        gameName.toLowerCase()
+        normalizeCsvValue(
+          row.game
+        ) ===
+        targetGame
     )
-    .sort((a, b) => b.points - a.points);
+    .sort(
+      (a, b) =>
+        b.points -
+        a.points
+    );
 }

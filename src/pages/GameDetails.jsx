@@ -1359,11 +1359,9 @@ function GameDetails() {
           />
         )}
 
-      {!isUnluckiest && (
-        <GameLeaderboard
-          gameData={gameData}
-        />
-      )}
+      <GameLeaderboard
+        gameData={gameData}
+      />
     </div>
   );
 }
