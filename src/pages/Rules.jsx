@@ -68,7 +68,7 @@ const gameRules = [
     payouts:
       "0 Wins: .5 spin, 1 Win: 1 spin, 2 Win: 2 spins, Shutout/Slot: .5 spin",
     rules:
-      "Game to 21 win by 2, not exact. Over 21 back to 15. OT increases by 7 per round. Slot puts you at 21 or the next OT threshold, not auto win. Hitting the disc in the can but back out the slot is only 1 point.",
+      "Game to 21, exact. Over 21 back to 15. OT increases by 7 per round. Slot puts you at 21 or the next OT threshold, not auto win. Hitting the disc in the can but back out the slot is only 1 point.",
   },
   {
     name: "HR Derby",
